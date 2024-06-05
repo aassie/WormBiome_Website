@@ -1,0 +1,10 @@
+- *27 June 2023*:
+    - C. elegans Meeting fixes
+- *7 June 2023*:
+    - Fixing broken blast
+- *30 May 2023*:
+    - Database update
+    - Cosmetic adjustment
+    - Addition of "Search by gene name" function
+- *13 March 2023*:
+    - First alpha release of WormBiome, our Genome collection of bacteria related to _C. elegans_ 🔧.
