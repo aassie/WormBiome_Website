@@ -6,20 +6,26 @@ library(reactable)
 library(tidyverse)
 library(ggtree)
 library(treeio)
-library(RMySQL)
+library(DBI)
+
+readRenviron("~/.Renviron")
 
 custom_db<-"All.ref"
 print("Loading database")
-textOutput("Loading database")
+
+#First connection to database
 wbdb <- dbConnect(
   RMariaDB::MariaDB(),
-  host = "localhost",
-  user = "wormaster",
-  password = "Adrien-973",
+  host = "127.0.0.1",
+  port = '3306',
+  user = "wormreader",
+  password = Sys.getenv("KEY1"),
   dbname = "wormbiome"
 )
-
+#Get genome names
 ugenome=pull((dbGetQuery(wbdb, "SELECT DISTINCT Genome FROM wb")))
+# Get wb column column names
+column_names <- dbGetQuery(wbdb, sprintf("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", "wormbiome", "wb"))
 dbDisconnect(wbdb)
 
 print("Loading phylogenies")
@@ -56,7 +62,18 @@ ui = fluidPage(
                     .navbar-default .navbar-nav > .active > a:hover {color: black;background-color: #c6d7f4;}
                     .navbar-default .navbar-nav > li > a:hover {color: white;background-color:#415368;text-decoration:underline;}
                     "
-    ))),
+    )),
+    tags$script(HTML("
+    <!-- Google tag (gtag.js) -->
+    <script async src='https://www.googletagmanager.com/gtag/js?id=G-140FXSDHXK'></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+    
+      gtag('config', 'G-140FXSDHXK');
+    </script>
+      "))),
 
   navbarPage(
     collapsible = TRUE,
@@ -81,14 +98,14 @@ ui = fluidPage(
       tags$span("Gene Search")
     ),
     value = "tab2",
-    genseSearchUI("GS",wbdb,phylo,utable,ugenome)),
+    genseSearchUI("GS",phylo,utable,ugenome)),
     #Annotation Browser
     tabPanel(tags$div(
       tags$i(class = "fa-solid fa-dna"),
       tags$span("Annotations Browser")
     ), 
     value = "tab4",
-    geneListUI("GL",wbdb,phylo,ugenome)),
+    geneListUI("GL",phylo,ugenome)),
     #Tool Menu
     navbarMenu(
       title = tags$div(
@@ -101,7 +118,7 @@ ui = fluidPage(
         tags$span("Compare Features")
       ),
       value = "tab5",
-      comparatorUI("Comp",wbdb,phylo,kegg,tree,p_tree,ugenome)),
+      comparatorUI("Comp",phylo,kegg,tree,p_tree,ugenome)),
       #Blast Tool
       tabPanel(tags$div(
         HTML("<i class=\"fas fa-dna\" data-fa-transform=\"right-6\"></i>
@@ -127,13 +144,30 @@ ui = fluidPage(
     tabPanel(tags$div(
       tags$i(class = "fa-solid fa-cart-shopping"),
       uiOutput(NS("GL","uCartLabel"))),
-      userGeneCartUI("UGL",wbdb,phylo,utable)
+      userGeneCartUI("UGL",phylo,utable)
     )
   )
 )
 
 server <- function(input, output, session) {
+  wbdb <- pool::dbPool(
+    drv = RMariaDB::MariaDB(),
+    host = "127.0.0.1",
+    port = '3306',
+    user = "wormreader",
+    password = Sys.getenv("KEY1"),
+    dbname = "wormbiome"
+  )
+  
+  onStop(function() {
+    pool::poolClose(wbdb)
+  })
+  
+  print(date())
+  
+  # Initialize nrUTable as a reactiveVal
   nrUTable <- reactiveValues(nrow = 0L)
+  
   observeEvent(input$Mbutton, {
     updateTabsetPanel(session, inputId = "tabset", selected = "tab1")
   })
@@ -155,18 +189,34 @@ server <- function(input, output, session) {
   })
   
   utable <- reactiveValues(x=tibble())
-  #load_data()
   output$panel=renderUI(input$tabset)
   observeEvent(input$controller, {
     updateTabsetPanel(session, "hidden_tabs", selected = paste0("panel", input$controller))
   })
-
-  #Genelist
-  genelistserv("GL",wbdb, phylo,utable,nrUTable)
-  comparatorserv("Comp", wbdb, kegg, phylo,p_tree,getPalette,tibtree)
-  blastServer("BL",custom_db,wbdb,phylo)
-  userGeneCartserv("UGL",utable,wbdb,phylo,nrUTable)
-  genseSearchServ("GS",wbdb, phylo,utable,ugenome,nrUTable)
+  
+  #Dynamic Markdown reading
+  
+  output$newsMarkdown <- renderUI({
+    # Fetch the markdown content on GitHub raw markdown URL
+    markdown_url <- "https://raw.githubusercontent.com/aassie/WormBiome_Website/main/static/News.md"
+    response <- httr::GET(markdown_url)
+    if (httr::status_code(response) == 200) {
+      # Save the markdown content to a temporary file
+      temp_md_file <- tempfile(fileext = ".md")
+      writeLines(content(response, "text"), temp_md_file)
+      # Render the markdown in the UI
+      includeMarkdown(temp_md_file)
+    } else {
+      # Show an error message if the markdown can't be fetched
+      h4("Unable to fetch the markdown from GitHub.")
+    }
+  })
+  
+  genelistserv("GL", wbdb, column_names, phylo, utable, nrUTable)
+  comparatorserv("Comp", wbdb, column_names, kegg, phylo, p_tree, getPalette, tibtree)
+  blastServer("BL", custom_db, wbdb, phylo)
+  userGeneCartserv("UGL", utable, wbdb, phylo, nrUTable)
+  genseSearchServ("GS", wbdb, column_names, phylo, utable, ugenome, nrUTable)
 }
 
 print(proc.time()-start)

@@ -1,74 +1,66 @@
-genelistserv<-function(ida, data, phylo,utable,nrUTable){
+genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
   moduleServer(
     ida,
     function(input, output, session) {
-      wbdb <- dbConnect(
-        RMariaDB::MariaDB(),
-        host = "127.0.0.1",
-        port = '3306',
-        user = "wormreader",
-        Sys.getenv("KEY1"),
-        dbname = "wormbiome"
-      )
-      dataCname=as.vector(dbGetQuery(wbdb, "SELECT `COLUMN_NAME` 
-        FROM `INFORMATION_SCHEMA`.`COLUMNS` 
-        WHERE `TABLE_SCHEMA`='wormbiome'
-        AND `TABLE_NAME`='wb'"))
-      dbDisconnect(wbdb)
-      annotation=reactive(as.vector(unlist(dataCname[str_detect(dataCname, pattern = input$variable)])))
+      annotation=reactive(as.vector(unlist(column_names)[str_detect(unlist(column_names), pattern = input$AnnotDB)]))
       gensel<-reactive(phylo %>% 
                          filter(ID %in% input$genome|Genus %in% input$genus) %>% 
                          select(ID) %>% pull())
       
       # Create the search result table
       Rtable<-reactive({
-        wbdb <- dbConnect(
-          RMariaDB::MariaDB(),
-          host = "127.0.0.1",
-          port = '3306',
-          user = "wormreader",
-          Sys.getenv("KEY1"),
-          dbname = "wormbiome"
-        )
-        print(paste0("SELECT WB_geneID, Genome, ",paste0(annotation(), collapse = ", "),
-                     " FROM wb WHERE Genome IN ('", paste0(gensel(), collapse = "','"),"') ",
-                     "AND ",paste0(input$variable,"_ID")," != ''"))
-        tt<-dbGetQuery(wbdb,paste0("SELECT WB_geneID, Genome, ",paste0(annotation(), collapse = ", "),
-                                              " FROM wb WHERE Genome IN ('", paste0(gensel(), collapse = "','"),"') ",
-                                              "AND ",paste0(input$variable,"_ID")," != ''"))
-        dbDisconnect(wbdb)
+        tt<-dbGetQuery(wbdb,paste0("SELECT *",
+                                   " FROM wb WHERE Genome IN ('", paste0(gensel(), collapse = "','"),"') ",
+                                   "AND ",paste0(input$AnnotDB,"_ID")," != ''"))
         return(tt)
         })
+      
+      output$column_selector <- renderUI({
+        # Create a vector of column names that start with the selected Annotation database
+        selected_variable <- input[[NS(ida, "AnnotDB")]]
+        default_columns <- grep(paste0("^", selected_variable), annotation(), value = TRUE)
+        
+        # Include these columns in the default selection along with some fixed columns
+        default_selection <- unique(c("Genome", "WBM_geneID", default_columns))
+        
+        checkboxGroupInput(NS(ida, "columns"), "Select columns to display:",
+                           choices = c("All", as.vector(unlist(column_names))),
+                           selected = default_selection)
+      })
+      
       #Table for the UI
       output$data <- renderReactable({
-        reactable(Rtable(),
-                  searchable = TRUE,
-                  filterable = TRUE,
-                  selection="multiple",
-                  minRows = 20,
-                  defaultPageSize = 20)
-      })
+        dt<-Rtable()
+        #print(input$columns)
+        if ("All" %in% input$columns) {
+          reactable(dt,
+                    searchable = TRUE,
+                    filterable = TRUE,
+                    selection="multiple",
+                    minRows = 20,
+                    defaultPageSize = 20)
+        } else {
+          reactable(dt %>% select(input$columns),
+                    searchable = TRUE,
+                    filterable = TRUE,
+                    selection="multiple",
+                    minRows = 20,
+                    defaultPageSize = 20)
+        }
+        })
+      
       #nrUTable <- reactiveValues(nrow = 0L)
       uSelect<-eventReactive(input$selectGene, {
         selected <- getReactableState("data", "selected")
         req(selected)
-        Rtable()[selected,colnames(Rtable())=="WB_geneID"]
+        Rtable()[selected,colnames(Rtable())=="WBM_geneID"]
       },
       ignoreNULL = FALSE)
       observeEvent(input$selectGene,{
-        print(uSelect())
-        wbdb <- dbConnect(
-          RMariaDB::MariaDB(),
-          host = "127.0.0.1",
-          port = '3306',
-          user = "wormreader",
-          Sys.getenv("KEY1"),
-          dbname = "wormbiome"
-        )
-        sl<-dbGetQuery(wbdb,paste0("SELECT * FROM wb WHERE WB_geneID IN ('",
+        #print(uSelect())
+        sl<-dbGetQuery(wbdb,paste0("SELECT * FROM wb WHERE WBM_geneID IN ('",
                                    paste0(uSelect(), collapse = "','"),
                                    "')"))
-        dbDisconnect(wbdb)
         utable$x<-unique(rbind(utable$x,sl))
       })
       observeEvent(input$selectGene, {
@@ -92,7 +84,7 @@ genelistserv<-function(ida, data, phylo,utable,nrUTable){
   )
 }
 
-userGeneCartserv<-function(ida, utable,data, phylo,nrUTable){
+userGeneCartserv<-function(ida, utable, wbdb, phylo, nrUTable){
   moduleServer(
     ida,
     function(input, output, session) {
@@ -126,25 +118,19 @@ userGeneCartserv<-function(ida, utable,data, phylo,nrUTable){
   )
 }
 
-genseSearchServ<-function(ida, data, phylo,utable,ugenome,nrUTable){
+genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
   moduleServer(
     ida,
     function(input, output, session) {
-      wbdb <- dbConnect(
-        RMariaDB::MariaDB(),
-        host = "127.0.0.1",
-        port = '3306',
-        user = "wormreader",
-        Sys.getenv("KEY1"),
-        dbname = "wormbiome"
-      )
-      dataCname=unlist(dbGetQuery(wbdb, "SELECT `COLUMN_NAME` 
-        FROM `INFORMATION_SCHEMA`.`COLUMNS` 
-        WHERE `TABLE_SCHEMA`='wormbiome'
-        AND `TABLE_NAME`='wb'"))
-      dbDisconnect(wbdb)
+      output$column_selector <- renderUI({
+        default_selection <- unique(c("Genome", "WBM_geneID",  "Bakta_ID", "gapseq_ID", "IMG_ID", "PATRIC_ID", "Prokka_ID", "Contig_name","Bakta_product","IMG_product","PATRIC_product","Prokka_product"))
+        checkboxGroupInput(NS(ida, "Dcolumns"), "",
+                           choices = c("All", as.vector(unlist(column_names))),
+                           selected = default_selection)
+      })
+      
       #column selection
-      annotation=reactive(as.vector(dataCname[str_detect(dataCname, pattern = AnotTrack())]))
+      annotation=reactive(as.vector(column_names[str_detect(column_names, pattern = AnotTrack())]))
 
       #Taxonomy Filter Functions
       output$TL.second <- renderUI({
@@ -160,7 +146,8 @@ genseSearchServ<-function(ida, data, phylo,utable,ugenome,nrUTable){
       })
       
       GenomeList=reactive(if(any(input$Sgenome %in% "All")){ugenome}else{input$Sgenome})
-    
+      Cfilter=reactive(if(any(input$ColumnFilter %in% "All")){column_names}else{input$ColumnFilter})
+      
       gensel<-reactive(if(is_empty(input$TL)){
         phylo %>% 
           filter(ID %in% GenomeList())%>% select(ID) %>% pull()
@@ -173,18 +160,7 @@ genseSearchServ<-function(ida, data, phylo,utable,ugenome,nrUTable){
       #Debug
       output$value <-renderText({ input$geneSearch })
       #Subsection filter
-      output$searchSecond <- renderUI({
-        ns <- session$ns
-        selectizeInput(ns("filter2"), "Search in:",
-                       choices =   annotation(),
-                       options = list(
-                         placeholder = 'Please select an option below',
-                         onInitialize = I('function() { this.setValue(""); }')
-                       ),
-                       selected = character(0),
-                       multiple=T,)
-      })
-      
+
       qsearch<-eventReactive(input$actionSearch,{
         input$geneSearch
       }, ignoreNULL = FALSE,
@@ -193,63 +169,44 @@ genseSearchServ<-function(ida, data, phylo,utable,ugenome,nrUTable){
         input$Svariable
       }, ignoreNULL = FALSE,
       )
-      Fil2=eventReactive(input$actionSearch,{
-        input$filter2
-      }, ignoreNULL = FALSE,
-      )
       #Some statistics
       output$uSearchDesc<-renderText({
         paste0("Your search includes ",nrow(Sdata())," gene",ifelse(nrow(Sdata())>1,"s","")," from ",length(unique(Sdata()$Genome))," genome", ifelse(length(unique(Sdata()$Genome))>1,"s",""))
       })
-      Sdata<-reactive({
-        #print(annotation())
-        print(paste("activated for:", qsearch()))
-        if(qsearch()!="Search"){
-          if(length(Fil2())==0){
-            wbdb <- dbConnect(
-              RMariaDB::MariaDB(),
-              host = "127.0.0.1",
-              port = '3306',
-              user = "wormreader",
-              Sys.getenv("KEY1"),
-              dbname = "wormbiome"
-            )
-          st<-dbGetQuery(wbdb,paste0("SELECT WB_geneID, Genome, ",
-                                     paste0(annotation(), collapse = ", "),
-                                     " FROM wb WHERE CONCAT_WS('',", 
-                                     paste0(annotation(), collapse = ",") ,
-                                     ") LIKE CONCAT('%','",
-                                     qsearch(),
-                                     "','%') AND Genome IN ('", 
-                                     paste0(gensel(), collapse = "','"),"')"))
-          dbDisconnect(wbdb)
-          return(st)
-          } 
-          else {
-            wbdb <- dbConnect(
-              RMariaDB::MariaDB(),
-              host = "127.0.0.1",
-              port = '3306',
-              user = "wormreader",
-              Sys.getenv("KEY1"),
-              dbname = "wormbiome"
-            )
-            st<-dbGetQuery(wbdb,paste0("SELECT WB_geneID, Genome, ",
-                                       paste0(annotation(), collapse = ", "),
-                                       " FROM wb WHERE ", 
-                                       input$filter2 ,
-                                       " LIKE CONCAT('%','",
-                                       qsearch(),
-                                       "','%') AND Genome IN ('", 
-                                       paste0(gensel(), collapse = "','"),"')"))
-            
-            dbDisconnect(wbdb)
-            return(st)
-          }
-        } else{
-          data.frame(Example="")
+      
+      Sdata <- reactive({
+        req(qsearch())
+        #Debug
+        #print(Cfilter())
+        #print(GenomeList())
+        if (qsearch() == "" ||qsearch() == "Search" || is.null(qsearch())) {
+          return(data.frame(Example = "No search term provided"))
+        } else {
+        
+        filter_clause <- if (is.null(Cfilter()) || length(Cfilter()) == 0) {
+          paste0("CONCAT_WS('', ", paste(input$Dcolumns, collapse = ", "), ") LIKE '%", qsearch(), "%'")
+        } else {
+          paste0(Cfilter(), " LIKE '%", qsearch(), "%'")
         }
+        
+        query <- paste0(
+          "SELECT WBM_geneID, Genome, ", paste(input$Dcolumns, collapse = ", "),
+          " FROM wb WHERE ", filter_clause, 
+          " AND Genome IN ('", paste(gensel(), collapse = "','"), "')"
+        )
+        
+        print(query)  # Debug query
+        
+        withProgress(message = "Querying database...", value = 0, {
+        tryCatch({
+          result <- dbGetQuery(wbdb, query)
+        }, error = function(e) {
+          print(e)
+          result <- data.frame(Example = "Error in database query")
         })
+        
+        return(result)
+      })}})
       
       output$STable <- renderReactable({
         reactable(Sdata(),
@@ -267,22 +224,13 @@ genseSearchServ<-function(ida, data, phylo,utable,ugenome,nrUTable){
       uSelect<-eventReactive(input$selectGene, {
         selected <- getReactableState("STable", "selected")
         req(selected)
-        pull(Sdata()[selected,colnames(Sdata())=="WB_geneID"])
+        pull(Sdata()[selected,colnames(Sdata())=="WBM_geneID"])
       },
       ignoreNULL = FALSE)
       observeEvent(input$selectGene,{
-        wbdb <- dbConnect(
-          RMariaDB::MariaDB(),
-          host = "127.0.0.1",
-          port = '3306',
-          user = "wormreader",
-          Sys.getenv("KEY1"),
-          dbname = "wormbiome"
-        )
-        sl<-dbGetQuery(wbdb,paste0("SELECT * FROM wb WHERE WB_geneID LIKE CONCAT('%','",
+        sl<-dbGetQuery(wbdb,paste0("SELECT * FROM wb WHERE WBM_geneID LIKE CONCAT('%','",
                                    uSelect(),
                                    "','%')"))
-        dbDisconnect(wbdb)
         utable$x<-unique(rbind(utable$x,sl))
       })
       observeEvent(input$selectGene, {
@@ -306,24 +254,10 @@ genseSearchServ<-function(ida, data, phylo,utable,ugenome,nrUTable){
     })
     }
 
-comparatorserv<-function(ida, data, kegg, phylo,p_tree,getPal=getPalette,tibtree){
+comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPalette,tibtree){
   moduleServer(
     ida,
     function(input, output, session) {
-      #Get database column names
-      wbdb <- dbConnect(
-        RMariaDB::MariaDB(),
-        host = "127.0.0.1",
-        port = '3306',
-        user = "wormreader",
-        Sys.getenv("KEY1"),
-        dbname = "wormbiome"
-      )
-      dataCname=unlist(dbGetQuery(wbdb, "SELECT `COLUMN_NAME` 
-        FROM `INFORMATION_SCHEMA`.`COLUMNS` 
-        WHERE `TABLE_SCHEMA`='wormbiome'
-        AND `TABLE_NAME`='wb'"))
-      dbDisconnect(wbdb)
       #Kegg filter
       output$secondSelection <- renderUI({
         ns <- session$ns
@@ -349,8 +283,8 @@ comparatorserv<-function(ida, data, kegg, phylo,p_tree,getPal=getPalette,tibtree
                        multiple=T)
       })
       #Get the annotation names based on which database is selected
-      annotation=reactive(as.vector(dataCname[str_detect(dataCname, pattern = input$anot)]))
-      #Genera selection
+      annotation=reactive(as.character(unlist(column_names))[str_detect(as.character(unlist(column_names)), pattern = input$anot)])
+      #Genome selection
       gensel<-reactive(if(is_empty(input$TL)){
         phylo %>% 
           filter(ID %in% input$genome)%>% select(ID) %>% pull()
@@ -358,36 +292,29 @@ comparatorserv<-function(ida, data, kegg, phylo,p_tree,getPal=getPalette,tibtree
         phylo %>% 
           filter(ID %in% input$genome|get(input$TL) %in% input$TL2)%>% select(ID) %>% pull()
       })
-      
+      #What Kegg is selected
       koname=reactive(paste0(input$anot,"_KO"))
       
+      #Genome table
       Ptable<-reactive({
-        dbquery= paste0("SELECT WB_geneID, Genome, ",
+        klvl <- sym(input$kolevel)
+        dbquery= paste0("SELECT WBM_geneID, Genome, ",
                         paste0(annotation(), collapse = ", "),
                         " FROM wb WHERE Genome IN ('", paste0(gensel(), collapse = "','"),"') ",
                         "AND ",paste0(input$anot,"_ID")," != ''")
-        #print(paste0("dbGetQuery(",data," ",dbquery,")"))
-        wbdb <- dbConnect(
-          RMariaDB::MariaDB(),
-          host = "127.0.0.1",
-          port = '3306',
-          user = "wormreader",
-          Sys.getenv("KEY1"),
-          dbname = "wormbiome"
-        )
-        tt<-dbGetQuery(wbdb,dbquery) %>%
-          mutate(KO=ifelse(is.na(get(koname())),
-                           "No Annotations",
-                           get(koname())),
-                 KO=strsplit(KO,"\\|")) %>%
+        tt <- dbGetQuery(wbdb, dbquery) %>%
+          mutate(
+            KO = ifelse(is.na(get(koname())), "No Annotations", get(koname())),
+            KO = strsplit(KO, "\\|")
+          ) %>%
           unnest(KO) %>%
-          group_by(Genome,KO) %>% 
-          dplyr::summarise(kegcount=n()) %>%
+          group_by(Genome, KO) %>%
+          dplyr::summarise(kegcount = n()) %>%
           ungroup() %>% 
           left_join(kegg, relationship = "many-to-many")
-        dbDisconnect(wbdb)
-        return(tt)
-      })
+        
+        return(as.data.frame(tt)) 
+        })
 
       Rtable<-reactive(
         if(is_empty(input$filter2)){
@@ -397,32 +324,58 @@ comparatorserv<-function(ida, data, kegg, phylo,p_tree,getPal=getPalette,tibtree
             filter(get(input$filter) %in% input$filter2)
         }
       )
-      output$data <- renderPlot({
-        if(is_empty(gensel())){
-          ggplot() +
+      
+      #Interactive plotly for kegg levels
+      output$StackBarData <- plotly::renderPlotly({
+        withProgress(message = "Creating Stack Barplot...", value = 0, {
+        if (is_empty(gensel())) {
+          p <- ggplot() +
             theme_void() +
-            geom_text(aes(0,0,label="Please select a genome")) +
+            geom_text(aes(0, 0, label = "Please select a genome")) +
             xlab(NULL)
-        }else{
-          klvl=sym(input$kolevel)
-          Rtable()%>% 
-            left_join(phylo, by=c("Genome"="ID")) %>% 
-            ggplot(aes(x=Genome,y=kegcount,fill=!!klvl))+
-            geom_bar(alpha=1,stat="identity", position="fill")+
-            theme_minimal()+
-            theme(axis.text.x = element_text(angle=90))+
-            facet_wrap(vars(get(input$TL)), scales = "free")+
-            guides(fill=guide_legend(ncol=1))+
+        } else {
+          klvl <- sym(input$kolevel)
+          p <- Rtable() %>%
+            group_by(Genome, !!klvl) %>%
+            dplyr::summarise(kegcount = sum(kegcount)) %>% 
+            ungroup() %>% 
+            filter(!is.na(!!klvl)) %>% 
+            left_join(phylo, by = c("Genome" = "ID"))
+          pl = p %>% 
+            select(!!klvl) %>% 
+            pull()
+          p <- p %>%
+            mutate(legend=str_wrap(pl, width = 20)) %>% 
+            ggplot(aes(x = Genome,
+                       y = kegcount,
+                       fill = legend,
+                       text = paste(
+                         "Genome:", Genome,
+                         "<br>Kegg Count:", kegcount,
+                         "<br>Level:", legend
+                         )
+                       )
+                   ) +
+            geom_bar(alpha = 1, stat = "identity", position = "fill") +
+            theme_minimal() +
+            theme(axis.text.x = element_text(angle = 90)) +
+            facet_grid(~get(input$TL), scales = "free",space = "free_y") +
+            guides(fill = guide_legend(ncol = 1)) +
             ylab("Percent")
-        }},
-        execOnResize = TRUE)
-      output$pcoa <- renderPlot(
-        if(length(gensel())<2){
-          ggplot() +
+        }
+        plotly::ggplotly(p,tooltip = "text")
+      })})
+      
+      output$pcoa <- plotly::renderPlotly({
+        withProgress(message = "Creating PCoA Plot...", value = 0, {
+        if(length(gensel())<3){
+          p2=ggplot() +
             theme_void() +
-            geom_text(aes(0,0,label="Please select two genome or more")) +
+            geom_text(aes(0,0,label="Please select two genomes or more")) +
             xlab(NULL)
         }else{
+          #Debug
+          #print(paste(gensel(),"and",length(gensel())))
           ptbl<-Rtable()%>% 
             select(Genome,KO,kegcount) %>%
             unique() %>%
@@ -441,7 +394,13 @@ comparatorserv<-function(ida, data, kegg, phylo,p_tree,getPal=getPalette,tibtree
           head(ptbl)
           colourCount=length(unique(Kplot$Genus))
           
-          ggplot(Kplot, aes(x=V1, y=V2, col=Genus)) +
+          p2=ggplot(Kplot, aes(x=V1,
+                               y=V2,
+                               col=Genus,
+                               text = paste(
+                                 "Genome:", Genome,
+                                 "Genus:",Genus
+                               ))) +
             geom_point()+
             theme_bw()+
             xlab(paste("Dimension 1", Keig1, "%",sep=" "))+
@@ -449,8 +408,9 @@ comparatorserv<-function(ida, data, kegg, phylo,p_tree,getPal=getPalette,tibtree
             ggtitle("Principal Coordinates Analysis of Kegg predictions")+
             scale_color_manual(values = getPal(colourCount), name="Genus")
         }
-      )
-      
+        plotly::ggplotly(p2)
+      })})
+
       grp<-reactive(if(is_empty(gensel())){
         ""
       }else{

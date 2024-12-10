@@ -10,7 +10,7 @@ home=fluidPage(
         column(12, h1("News", style="color:white;font-family: 'Montserrat', sans-serif;"),
                style="background-color:#ea8b8b;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;"),
         column(12,
-               includeMarkdown("./static/News.md"),
+               uiOutput("newsMarkdown"),
                style="padding-top:1em")
      ),
   ),
@@ -66,7 +66,7 @@ PageDoc=fluidPage(
            column(12, h2("Documentation", style="color:white;font-family: 'Montserrat', sans-serif;"), 
                   style="background-color:#29313f;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;"),
            column(12, 
-                  includeMarkdown("./static/Manual.md"),
+                  includeMarkdown("https://raw.githubusercontent.com/aassie/WormBiome_Website/refs/heads/main/static/Manual.md"),
                   style="padding-top:1em"),
            tags$head(tags$style(".NewsRow{padding-top: 25px}"))
   )
@@ -91,12 +91,13 @@ PageContact=function(ida){
   )
 }
 
-geneListUI= function(ida,wb,phylo,ugenome){
+geneListUI= function(ida,phylo,ugenome){
   fluidPage( 
     fluidRow( 
       column(2,
-             div(selectInput(NS(ida,"variable"), "Variable:",
-                             c("Prokka" = "Prokka",
+             div(selectInput(NS(ida,"AnnotDB"), "Annotation database:",
+                             c("Bakta" = "Bakta",
+                               "Prokka" = "Prokka",
                                "IMG" = "IMG",
                                "PATRIC" = "PATRIC"))),
              div(selectizeInput(NS(ida,"genome"), "Genome:",
@@ -118,7 +119,30 @@ geneListUI= function(ida,wb,phylo,ugenome){
              actionButton(NS(ida,"selectGene"), "Select Gene(s)"),
              actionButton(NS(ida,"resetGene"), "Clear Gene(s)"),
              downloadButton(NS(ida,"downloadSData"), "Download selected"),
-             downloadButton(NS(ida,"downloadAData"), "Download All")
+             downloadButton(NS(ida,"downloadAData"), "Download All"),
+             tags$script(HTML("
+             $(document).on('shiny:inputchanged', function(event) {
+              if (event.name === 'columns') {
+               if (event.value.includes('All')) {
+                // Check all checkboxes
+                $('input:checkbox[name=\"columns[]\"]').prop('checked', true);
+               }
+             }
+            });
+            $(document).on('change', 'input:checkbox[name=\"columns[]\"]', function() {
+              // If 'All' is deselected, deselect all checkboxes
+              if (!this.checked && this.value === 'All') {
+                $('input:checkbox[name=\"columns[]\"]').prop('checked', false);
+              } else {
+              // If one of the specific checkboxes is deselected, make sure 'All' is deselected too
+              var allChecked = $('input:checkbox[name=\"columns[]\"]:not(:checked)').length == 1;
+              $('input:checkbox[name=\"columns[]\"][value=\"All\"]').prop('checked', allChecked);        
+              }
+            });
+            ")),
+             div(style = "height: 200px; overflow-y: scroll;",  # Adjust height as necessary
+                 uiOutput(NS(ida, "column_selector"))
+             ),
       ),
       column(10,
              reactableOutput(NS(ida,"data"))
@@ -127,77 +151,100 @@ geneListUI= function(ida,wb,phylo,ugenome){
   )
 }
 
-genseSearchUI<-function(ida,wb,phylo,utable,ugenome){
-  fluidPage( 
+genseSearchUI <- function(ida, phylo, utable, ugenome) {
+  fluidPage(
     fluidRow(
       h1("Search settings")
     ),
     fluidRow(
+      # First Row: Inputs
       column(
-        width = 3,
-        div(style="display:inline-block",
-            textInput(NS(ida,"geneSearch"), "Text Search", "Search"))
-        ),
+        width = 4,
+        div(style = "display: flex; flex-direction: column; height: 100%; justify-content: space-between;",
+            textInput(NS(ida, "geneSearch"), "Text Search", "Search"))
+      ),
       column(
-        width = 3,
-        div(style="display:inline-block",
-            selectInput(NS(ida,"Svariable"), "Annotation track(s):",
-                        c("All" = ".",
-                          "Prokka" = "Prokka",
-                          "IMG" = "IMG",
-                          "PATRIC" = "PATRIC"),
-                        selected="All"))
-        ),
+        width = 4,
+        p(""),
+        div(style = "display: flex; flex-direction: column; height: 100%; justify-content: space-between;",
+            actionButton(NS(ida, "actionSearch"), "Search"))
+      ),
+      column(width = 4),
+      column(width = 4)
+    ),
+    tags$hr(),
+    fluidRow(
+      # Second Row: Filters
       column(
-        width = 3,
-        actionButton(NS(ida,"actionSearch"), "Search"),),
+        width = 4,
+        div(style="display: flex; flex-direction: column; height: 100%; justify-content: space-between;",
+            #Debug
+            #div(p("Checking: "), verbatimTextOutput(NS(ida, "value"))),
+            div(selectizeInput(NS(ida, "ColumnFilter"), "Filter by Column (Optional)",
+                               choices = c("All", column_names),
+                               multiple = TRUE,
+                               selected = "All"
+                               )
+                ),
+            div(style = "display: flex; flex-direction: column; height: 100%; justify-content: space-between;",
+                tags$b("Result Summary:"),
+                uiOutput(NS(ida, "uSearchDesc"))
+            )
+            )
+      ),
       column(
-        width = 3,
-        h3("Summary:"),
-        uiOutput(NS(ida,"uSearchDesc"))
+        width = 4,
+        div(style = "display: flex; flex-direction: column; height: 100%; justify-content: space-between;",
+            div(selectizeInput(NS(ida, "TL"), "Taxonomic filtering (optional):",
+                               choices = colnames(phylo)[-c(1, 2, 8)],
+                               options = list(
+                                 placeholder = 'Please select an option below',
+                                 onInitialize = I('function() { this.setValue("Phyla"); }')),
+                               multiple = FALSE)
+                ),
+            div(uiOutput(NS(ida, "TL.second"))),
+            div(selectizeInput(NS(ida, "Sgenome"), "Filter by Genome (Optional)",
+                               choices = c("All", ugenome),
+                               multiple = TRUE,
+                               selected = "All")
+                )
+            )
+      ),
+      column(width = 4),
+      column(
+        width = 4,
+        div(style = "height: 200px; overflow-y: scroll;",
+            tags$b("Result Columns to display:"),
+            uiOutput(NS(ida, "column_selector"))
+      ))
+    ),
+    tags$hr(),
+    fluidRow(
+      # Third Row: Actions
+      column(
+        width = 12,
+        div(style = "display: flex; justify-content: center;align-items: center",
+            actionButton(NS(ida, "selectGene"), "Select Gene(s)"),
+            actionButton(NS(ida, "resetGene"), "Clear Gene(s)"),
+            downloadButton(NS(ida, "downloadSData"), "Download selected"),
+            downloadButton(NS(ida, "downloadAData"), "Download All")
+        )
       )
     ),
     fluidRow(
-      column(
-        width = 3,
-        div(p("Checking: "),verbatimTextOutput(NS(ida,"value"))),
-        div(uiOutput(NS(ida,"searchSecond")))
-      ),
-      column(
-        width = 3,
-        div(
-          selectizeInput(NS(ida,"TL"), "Taxonomic filtering (optional):",
-                         choices =   colnames(phylo)[-c(1,2,8)],
-                         options = list(
-                           placeholder = 'Please select an option below',
-                           onInitialize = I('function() { this.setValue("Phyla"); }')
-                         ),multiple=F)),
-        div(
-          uiOutput(NS(ida,"TL.second"))
-        ),
-        div(selectizeInput(NS(ida,"Sgenome"), "Filter by Genome (Optional)",
-                              choices =   c("All",ugenome),
-                           multiple=T,
-                           selected="All"
-                              )))
-        ),
-    fluidRow(
-      width = 3,
-           actionButton(NS(ida,"selectGene"), "Select Gene(s)"),
-           actionButton(NS(ida,"resetGene"), "Clear Gene(s)"),
-           downloadButton(NS(ida,"downloadSData"), "Download selected"),
-           downloadButton(NS(ida,"downloadAData"), "Download All")
-           
+      h1("Results")
     ),
     fluidRow(
-      h1("Results")
-      ),
-    fluidRow(
-      reactableOutput(NS(ida,"STable")))
+      # Results Table
+      div(
+        style = "width: 100%; overflow-x: auto;",
+        reactableOutput(NS(ida, "STable"))
+      )
+    )
   )
 }
 
-userGeneCartUI<-function(ida,wb,phylo,utable){
+userGeneCartUI<-function(ida,phylo,utable){
   fluidPage( 
     fluidRow(column(10,
                     uiOutput(NS(ida,"uCartDescription")),
@@ -212,14 +259,14 @@ userGeneCartUI<-function(ida,wb,phylo,utable){
   )
 }
 
-comparatorUI<- function(ida,wb,phylo,kegg,tree,p_tree,ugenome){
+comparatorUI<- function(ida,phylo,kegg,tree,p_tree,ugenome){
   ns <- NS(ida)
   fluidPage( 
     fluidRow( 
       column(2,
              div(
                selectInput(NS(ida,"anot"), "Annotation track:",
-                           c("Prokka" = "Prokka"))),
+                           c("Bakta" = "Bakta"))),
              div(
                selectizeInput(NS(ida,"TL"), "Taxonomic level:",
                               choices =   colnames(phylo)[-c(1,2,8)],
@@ -259,12 +306,12 @@ comparatorUI<- function(ida,wb,phylo,kegg,tree,p_tree,ugenome){
              )
       ),
       column(10,
-             plotOutput(NS(ida,"data"))
+             plotly::plotlyOutput(NS(ida,"StackBarData"))
       )
     ),
     fluidRow(
       column(6,
-             plotOutput(NS(ida,"pcoa"))
+             plotly::plotlyOutput(NS(ida,"pcoa"))
       ),
       column(6,
              plotOutput(NS(ida,"tree"))
