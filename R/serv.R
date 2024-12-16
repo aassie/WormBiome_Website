@@ -1,18 +1,45 @@
+## Gene list per genome page
 genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
   moduleServer(
     ida,
     function(input, output, session) {
       annotation=reactive(as.vector(unlist(column_names)[str_detect(unlist(column_names), pattern = input$AnnotDB)]))
-      gensel<-reactive(phylo %>% 
-                         filter(ID %in% input$genome|Genus %in% input$genus) %>% 
-                         select(ID) %>% pull())
+      
+      output$GLTL.second<-renderUI({
+        ns=session$ns
+        createTaxonomyFilterUI(ns,phylo,input$GLTL,"GLTL2")
+        })
+      
+      gensel<-reactive(if(is_empty(input$GLTL)){
+        phylo %>% 
+          filter(ID %in% input$genome)%>% select(ID) %>% pull()
+      }else{
+        phylo %>% 
+          filter(ID %in% input$genome|get(input$GLTL) %in% input$GLTL2)%>% select(ID) %>% pull()
+      })
+      
+      tt=reactiveValues(x=tibble(
+        WBM_geneID = character(),  # Empty character column
+        Genome = character(),      # Empty character column
+        Bakta_ID = character(),    # Add other columns as needed
+        Contig_name = character(), # Empty character column
+        Bakta_product = character()# Add other columns as needed
+      ))
       
       # Create the search result table
       Rtable<-reactive({
-        tt<-dbGetQuery(wbdb,paste0("SELECT *",
-                                   " FROM wb WHERE Genome IN ('", paste0(gensel(), collapse = "','"),"') ",
-                                   "AND ",paste0(input$AnnotDB,"_ID")," != ''"))
-        return(tt)
+        withProgress(message = "Querying database...", value = 0, {
+          tryCatch({
+            if(length(gensel())==0||is.null(gensel())){
+              ts=tt$x
+            }else{
+              ts<-dbGetQuery(wbdb,paste0("SELECT *",
+                                         " FROM wb WHERE Genome IN ('", paste0(gensel(), collapse = "','"),"') ",
+                                         "AND ",paste0(input$AnnotDB,"_ID")," != ''"))
+            }
+            return(ts)
+            })
+          })
         })
       
       output$column_selector <- renderUI({
@@ -31,93 +58,64 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
       #Table for the UI
       output$data <- renderReactable({
         dt<-Rtable()
-        #print(input$columns)
-        if ("All" %in% input$columns) {
-          reactable(dt,
-                    searchable = TRUE,
-                    filterable = TRUE,
-                    selection="multiple",
-                    minRows = 20,
-                    defaultPageSize = 20)
-        } else {
-          reactable(dt %>% select(input$columns),
-                    searchable = TRUE,
-                    filterable = TRUE,
-                    selection="multiple",
-                    minRows = 20,
-                    defaultPageSize = 20)
-        }
+        if(nrow(dt)>0){
+          #print(input$columns)
+          if ("All" %in% input$columns) {
+            reactable(dt,
+                      searchable = TRUE,
+                      filterable = TRUE,
+                      selection="multiple",
+                      minRows = 20,
+                      defaultPageSize = 20,
+                      language = reactableLang(
+                        searchPlaceholder = "Search...",
+                        noData = "No data available.",
+                        pageInfo = "{rowStart} to {rowEnd} of {rows} entries",
+                        pagePrevious = "\u276e",
+                        pageNext = "\u276f",
+                        
+                        # Accessible labels for assistive technologies such as screen readers.
+                        # These are already set by default, but don't forget to update them when
+                        # changing visible text.
+                        pagePreviousLabel = "Previous page",
+                        pageNextLabel = "Next page")
+                      )
+          } else {
+            reactable(dt %>% select(input$columns),
+                      searchable = TRUE,
+                      filterable = TRUE,
+                      selection="multiple",
+                      minRows = 20,
+                      defaultPageSize = 20,
+                      language = reactableLang(
+                        searchPlaceholder = "Search...",
+                        noData = "No data available.",
+                        pageInfo = "{rowStart} to {rowEnd} of {rows} entries",
+                        pagePrevious = "\u276e",
+                        pageNext = "\u276f",
+                        
+                        # Accessible labels for assistive technologies such as screen readers.
+                        # These are already set by default, but don't forget to update them when
+                        # changing visible text.
+                        pagePreviousLabel = "Previous page",
+                        pageNextLabel = "Next page")
+                      )
+            }
+          }else{
+            reactable(dt,
+                      language = reactableLang(
+                        searchPlaceholder = "Search...",
+                        noData = "Select a Genome or a taxnomic unit to begin",)
+            )
+          }
         })
       
-      #nrUTable <- reactiveValues(nrow = 0L)
-      uSelect<-eventReactive(input$selectGene, {
-        selected <- getReactableState("data", "selected")
-        req(selected)
-        Rtable()[selected,colnames(Rtable())=="WBM_geneID"]
-      },
-      ignoreNULL = FALSE)
-      observeEvent(input$selectGene,{
-        #print(uSelect())
-        sl<-dbGetQuery(wbdb,paste0("SELECT * FROM wb WHERE WBM_geneID IN ('",
-                                   paste0(uSelect(), collapse = "','"),
-                                   "')"))
-        utable$x<-unique(rbind(utable$x,sl))
-      })
-      observeEvent(input$selectGene, {
-        nrUTable$nrow=nrow(utable$x)
-      })
-      observeEvent(input$resetGene, {
-        utable$x <-NULL
-        utable$x <- tibble()
-        nrUTable$nrow=nrow(utable$x)
-      })
-      output$uCartLabel<-renderText({
-        paste0("Selected Genes (",nrUTable$nrow,")")})
-      output$downloadAData <- downloadHandler(
-        filename = function() {
-          paste("WormBiome-", Sys.Date(), ".csv", sep="")
-        },
-        content = function(file) {
-          write_csv(Rtable(), file)
-        }
-      )}
+      geneSelectionHandler(input, output, utable, nrUTable, wbdb, "data",Rtable())
+      }
   )
 }
 
-userGeneCartserv<-function(ida, utable, wbdb, phylo, nrUTable){
-  moduleServer(
-    ida,
-    function(input, output, session) {
-      output$userGeneCart <- renderReactable({
-        reactable(utable$x,
-                  searchable = TRUE,
-                  filterable = TRUE,
-                  selection="multiple",
-                  minRows = 20,
-                  defaultPageSize = 20)
-      })
-      output$uCartDescription<-renderText({
-        paste0("Your cart currently contain ",nrow(utable$x)," gene",ifelse(nrow(utable$x)>1,"s","")," from ",length(unique(utable$x$Genome))," genome", ifelse(length(unique(utable$x$Genome))>1,"s",""))})
-      
-      observeEvent(input$resetGene, {
-        utable$x <-NULL
-        utable$x <- tibble()
-        nrUTable$nrow=nrow(utable$x)
-      })
-      output$uCartLabel<-renderText({
-        paste0("Selected Genes (",nrUTable$nrow,")")})
-      output$downloadAData <- downloadHandler(
-        filename = function() {
-          paste("WormBiome-", Sys.Date(), ".csv", sep="")
-        },
-        content = function(file) {
-          write_csv(STable(), file)
-        }
-      )
-    }
-  )
-}
-
+## Gene search page
 genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
   moduleServer(
     ida,
@@ -135,18 +133,11 @@ genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
       #Taxonomy Filter Functions
       output$TL.second <- renderUI({
         ns <- session$ns
-        selectizeInput(ns("TL2"), "Subset Taxonomy by : (Optional)",
-                       choices =   unique(phylo %>% select(input$TL) %>% unique() %>% pull),
-                       options = list(
-                         placeholder = 'Please select an option below',
-                         onInitialize = I('function() { this.setValue(""); }')
-                       ),
-                       selected = character(0),
-                       multiple=T)
+        createTaxonomyFilterUI(ns,phylo,input$TL,"TL2")
       })
       
       GenomeList=reactive(if(any(input$Sgenome %in% "All")){ugenome}else{input$Sgenome})
-      Cfilter=reactive(if(any(input$ColumnFilter %in% "All")){column_names}else{input$ColumnFilter})
+      Cfilter=reactive(if(any(input$ColumnFilter %in% "All")){as.vector("All")}else{input$ColumnFilter})
       
       gensel<-reactive(if(is_empty(input$TL)){
         phylo %>% 
@@ -183,19 +174,21 @@ genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
           return(data.frame(Example = "No search term provided"))
         } else {
         
-        filter_clause <- if (is.null(Cfilter()) || length(Cfilter()) == 0) {
-          paste0("CONCAT_WS('', ", paste(input$Dcolumns, collapse = ", "), ") LIKE '%", qsearch(), "%'")
-        } else {
-          paste0(Cfilter(), " LIKE '%", qsearch(), "%'")
-        }
+          #Select the column to search in (Or all of them)
+          filter_clause <- if(any(Cfilter() %in% "All")){
+          paste0("CONCAT_WS(' ',", paste(input$Dcolumns, collapse = ", "), ") LIKE '%", qsearch(), "%'")
+          } else {
+          paste0("CONCAT_WS(' ',", paste0(Cfilter(), collapse = ", "), ") LIKE '%", qsearch(), "%'")
+          }
+          
+          #Build the query
+          query <- paste0(
+            "SELECT ", paste(input$Dcolumns, collapse = ", "),
+            " FROM wb WHERE ", filter_clause, 
+            " AND Genome IN ('", paste(gensel(), collapse = "','"), "')"
+          )
         
-        query <- paste0(
-          "SELECT WBM_geneID, Genome, ", paste(input$Dcolumns, collapse = ", "),
-          " FROM wb WHERE ", filter_clause, 
-          " AND Genome IN ('", paste(gensel(), collapse = "','"), "')"
-        )
-        
-        print(query)  # Debug query
+        #print(query)  # Debug query
         
         withProgress(message = "Querying database...", value = 0, {
         tryCatch({
@@ -220,40 +213,12 @@ genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
       })
       
       #Gene selection and cart saving section
-      #nrUTable <- reactiveValues(nrow = 0L)
-      uSelect<-eventReactive(input$selectGene, {
-        selected <- getReactableState("STable", "selected")
-        req(selected)
-        pull(Sdata()[selected,colnames(Sdata())=="WBM_geneID"])
-      },
-      ignoreNULL = FALSE)
-      observeEvent(input$selectGene,{
-        sl<-dbGetQuery(wbdb,paste0("SELECT * FROM wb WHERE WBM_geneID LIKE CONCAT('%','",
-                                   uSelect(),
-                                   "','%')"))
-        utable$x<-unique(rbind(utable$x,sl))
-      })
-      observeEvent(input$selectGene, {
-        nrUTable$nrow=nrow(utable$x)
-      })
-      observeEvent(input$resetGene, {
-        utable$x <-NULL
-        utable$x <- tibble()
-        nrUTable$nrow=nrow(utable$x)
-      })
-      output$uCartLabel<-renderText({
-        paste0("Selected Genes (",nrUTable$nrow,")")})
-      output$downloadAData <- downloadHandler(
-        filename = function() {
-          paste("WormBiome-", Sys.Date(), ".csv", sep="")
-        },
-        content = function(file) {
-          write_csv(STable(), file)
-        }
-      )
-    })
-    }
 
+      geneSelectionHandler(input, output, utable, nrUTable, wbdb, "STable",Sdata())
+    })
+  }
+
+## Comparative tool page
 comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPalette,tibtree){
   moduleServer(
     ida,
@@ -273,14 +238,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
       #Taxonomy Filter
       output$TL.second <- renderUI({
         ns <- session$ns
-        selectizeInput(ns("TL2"), "Filter Taxonomy by:",
-                       choices =   unique(phylo %>% select(input$TL) %>% unique() %>% pull),
-                       options = list(
-                         placeholder = 'Please select an option below',
-                         onInitialize = I('function() { this.setValue(""); }')
-                       ),
-                       selected = character(0),
-                       multiple=T)
+        createTaxonomyFilterUI(ns,phylo,input$TL,"TL2")
       })
       #Get the annotation names based on which database is selected
       annotation=reactive(as.character(unlist(column_names))[str_detect(as.character(unlist(column_names)), pattern = input$anot)])
@@ -309,8 +267,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           ) %>%
           unnest(KO) %>%
           group_by(Genome, KO) %>%
-          dplyr::summarise(kegcount = n()) %>%
-          ungroup() %>% 
+          dplyr::summarise(kegcount = n(), .groups = "drop") %>%
           left_join(kegg, relationship = "many-to-many")
         
         return(as.data.frame(tt)) 
@@ -337,8 +294,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           klvl <- sym(input$kolevel)
           p <- Rtable() %>%
             group_by(Genome, !!klvl) %>%
-            dplyr::summarise(kegcount = sum(kegcount)) %>% 
-            ungroup() %>% 
+            dplyr::summarise(kegcount = sum(kegcount), .groups = "drop") %>%  
             filter(!is.na(!!klvl)) %>% 
             left_join(phylo, by = c("Genome" = "ID"))
           pl = p %>% 
@@ -366,6 +322,8 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
         plotly::ggplotly(p,tooltip = "text")
       })})
       
+      
+      #Principal component analysis
       output$pcoa <- plotly::renderPlotly({
         withProgress(message = "Creating PCoA Plot...", value = 0, {
         if(length(gensel())<3){
@@ -398,7 +356,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
                                y=V2,
                                col=Genus,
                                text = paste(
-                                 "Genome:", Genome,
+                                 "Genome:", ID,
                                  "Genus:",Genus
                                ))) +
             geom_point()+
@@ -408,7 +366,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
             ggtitle("Principal Coordinates Analysis of Kegg predictions")+
             scale_color_manual(values = getPal(colourCount), name="Genus")
         }
-        plotly::ggplotly(p2)
+        plotly::ggplotly(p2, tooltip = "text")
       })})
 
       grp<-reactive(if(is_empty(gensel())){
@@ -426,5 +384,263 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
       )
     }
   )
+}
+
+## Gene selection to user cart function
+geneSelectionHandler<-function(input, output, utable, nrUTable, wbdb, Csource,Ctable) {
+  uSelect <- eventReactive(
+    input$selectGene, {
+      selected <- getReactableState(Csource, "selected")
+      req(selected)
+      Ctable[selected, colnames(Ctable) == "WBM_geneID"]
+    },
+    ignoreNULL = FALSE
+  )
+  
+  observeEvent(input$selectGene, { 
+    withProgress(message = "Adding Genes to cart...", value = 0, {
+                 sl <- dbGetQuery(wbdb, paste0("SELECT * FROM wb WHERE WBM_geneID IN ('",
+                                               paste0(uSelect(), collapse = "','"),
+                                               "')"))
+                 utable$x <- unique(rbind(utable$x, sl))
+    })
+  })
+  
+  observeEvent(input$selectGene, {
+    nrUTable$nrow = nrow(utable$x)
+  })
+  
+  observeEvent(input$resetGene, {
+    utable$x <- NULL
+    utable$x <- tibble()
+    nrUTable$nrow = nrow(utable$x)
+  })
+  
+  output$uCartLabel <- renderText({
+    paste0("Selected Genes (", nrUTable$nrow, ")")
+  })
+  
+  output$downloadAData <- downloadHandler(
+    filename = function() {
+      paste("WormBiome-", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      write_csv(Rtable(), file)
+    }
+  )
+}
+
+## User gene cart page
+userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
+  moduleServer(
+    ida,
+    function(input, output, session) {
+      # Main Table
+      output$userGeneCart <- renderReactable({
+        reactable(
+          utable$x,
+          searchable = TRUE,
+          filterable = TRUE,
+          selection = "multiple",
+          minRows = if(nrow(utable$x)<20){nrow(utable$x)}else{20},
+          defaultPageSize = 20
+        )
+      })
+      
+      # Summary
+      output$uCartDescription <- renderText({
+        if (is.null(utable$x) || nrow(utable$x) == 0) {
+          "Your cart is currently empty."
+        } else {
+          paste0(
+            "Your cart currently contains ",
+            nrow(utable$x), " gene", ifelse(nrow(utable$x) > 1, "s", ""),
+            " from ", length(unique(utable$x$Genome)),
+            " genome", ifelse(length(unique(utable$x$Genome)) > 1, "s", "")
+          )
+        }
+      })
+      
+      # Buttons
+      observeEvent(input$resetGene, {
+        utable$x <- tibble()
+        nrUTable$nrow <- nrow(utable$x)
+      })
+      
+      # Download Button
+      output$downloadAData <- downloadHandler(
+        filename = function() {
+          paste("WormBiome-GeneCart-", Sys.Date(), ".csv", sep = "")
+        },
+        content = function(file) {
+          write_csv(utable$x, file)
+        }
+      )
+      
+      # Display: Taxonomic Overview Table
+      output$GCTable1 = renderReactable({
+        if (is.null(utable$x) || nrow(utable$x) == 0) {
+          # Render a placeholder table with a message
+          reactable(
+            tibble(Message = "Select Genes"),
+            searchable = FALSE,
+            filterable = FALSE,
+            pagination = FALSE,
+            defaultPageSize = 1,
+            class = "empty-message"
+          )
+        } else {
+          # Generate the actual table when utable$x is not empty
+          TaxoSummary <- utable$x %>% 
+            left_join(phylo, by = c("Genome" = "ID")) %>%
+            select(Genome, Genus) %>%
+            unique() %>% 
+            group_by(Genus) %>% 
+            dplyr::summarise(Genome_Number = n(), .groups = "drop") %>% 
+            arrange(desc(Genome_Number))
+          
+          reactable(
+            TaxoSummary,
+            searchable = TRUE,
+            filterable = TRUE,
+            selection = "multiple",
+            minRows = if (nrow(TaxoSummary) < 10) { nrow(TaxoSummary) } else { 10 },
+            defaultPageSize = 10
+          )
+        }
+      })
+      
+      # Display: Taxonomic Overview Graphic
+      output$GCoverview1 <- plotly::renderPlotly({
+        if (nrow(utable$x) == 0) {
+          plotly::plot_ly(x = 0, y = 0, type = "scatter", mode = "text",
+                          text = "No genes selected"
+          )
+        } else {
+          withProgress(message = "Creating Stack Barplot...", value = 0, {
+            utable$x %>% 
+              left_join(phylo, by = c("Genome" = "ID")) %>%
+              select(Genome, Genus) %>%
+              unique() %>% 
+              group_by(Genus) %>% 
+              dplyr::summarise(Genome_Number = n(), .groups = "drop") %>%
+              arrange(desc(Genome_Number)) %>% 
+              slice(1:10) %>% 
+              plotly::plot_ly(
+                x = ~Genome_Number,
+                y = ~Genus,
+                color=~Genus,
+                colors = RColorBrewer::brewer.pal(12, "Set3"),
+                type = "bar", orientation = "h"
+              )%>%
+              plotly::layout(title = "Genus Distribution",
+                             xaxis = list(title = "Count"),
+                             yaxis = list(title = "Genus", categoryorder = "total ascending"), # Order by value
+                             margin = list(l = 150, r = 30, t = 50, b = 120), # Add margins to center the plot
+                             legend = list(
+                               orientation = "h",
+                               x = 0.5,                # Center the legend horizontally
+                               y = -0.2,               # Place legend below the plot
+                               xanchor = "center",     # Align to the center
+                               yanchor = "top",
+                               tracegroupgap = 5       # Add small spacing between legend items
+                             ),
+                             showlegend = FALSE,
+                             autosize = TRUE          # Auto-adjust plot size
+              )
+          })
+        }
+      })
+      
+      # Display: Categories Overview Table
+      
+      output$GCTable2 = renderReactable({
+        if (is.null(utable$x) || nrow(utable$x) == 0) {
+          # Render a placeholder table with a message
+          reactable(
+            tibble(Message = "Select Genes"),
+            searchable = FALSE,
+            filterable = FALSE,
+            pagination = FALSE,
+            defaultPageSize = 1,
+            class = "empty-message"
+          )
+        } else {
+          CatSummary=utable$x %>% 
+            separate_rows(Bakta_KO, sep = "\\|") %>%
+            filter(!is.na(Bakta_KO), Bakta_KO != "NA") %>%
+            group_by(Bakta_KO) %>%
+            dplyr::summarise(Gene_Number = n(), .groups = "drop") %>%
+            arrange(desc(Gene_Number))
+          
+          reactable(
+            CatSummary,
+            searchable = TRUE,
+            filterable = TRUE,
+            selection = "multiple",
+            minRows = if(nrow(CatSummary)<10){nrow(CatSummary)}else{10},
+            defaultPageSize = 10
+          )
+        }})
+      
+      output$GCoverview2 <- plotly::renderPlotly({
+        if (nrow(utable$x) == 0) {
+          plotly::plot_ly(
+            x = 0, y = 0, type = "scatter", mode = "text",
+            text = "No genes selected"
+          )
+        } else {
+          withProgress(message = "Creating Stack Barplot...", value = 0, {
+            gtp=utable$x %>% 
+              separate_rows(Bakta_KO, sep = "\\|") %>%
+              filter(!is.na(Bakta_KO), Bakta_KO != "NA") %>%
+              group_by(Bakta_KO) %>%
+              dplyr::summarise(Gene_Number = n(), .groups = "drop") %>%
+              arrange(desc(Gene_Number))
+            
+            gtp %>%
+              slice(1:8) %>% 
+              plotly::plot_ly(x = ~Gene_Number,
+                              y = ~Bakta_KO,
+                              color= ~Bakta_KO,
+                              colors = RColorBrewer::brewer.pal(12, "Set3"),
+                              type = "bar",
+                              orientation = "h"
+              )%>%
+              plotly::layout(title = "Category Distribution",
+                             xaxis = list(title = "Count"),
+                             yaxis = list(title = "Category", categoryorder = "total ascending"), 
+                             margin = list(l = 150, r = 30, t = 50, b = 120), # Add margins to center the plot
+                             legend = list(
+                               orientation = "h",
+                               x = 0.5,                # Center the legend horizontally
+                               y = -0.2,               # Place legend below the plot
+                               xanchor = "center",     # Align to the center
+                               yanchor = "top",
+                               tracegroupgap = 5       # Add small spacing between legend items
+                             ),
+                             showlegend = FALSE,
+                             autosize = TRUE          # Auto-adjust plot size
+              )
+          }
+          )
+        }
+      })
+      
+    }
+  )
+}
+
+#Taxonomic filter option
+
+createTaxonomyFilterUI <- function(ns, phylo, Psource, target, selected = character(0)) {
+  selectizeInput(ns(target), "Subset Taxonomy by : (Optional)",
+                 choices = unique(phylo %>% select(all_of(Psource)) %>% unique() %>% pull),
+                 options = list(
+                   placeholder = 'Please select an option below',
+                   onInitialize = I('function() { this.setValue(""); }')
+                 ),
+                 selected = selected,
+                 multiple = TRUE)
 }
 

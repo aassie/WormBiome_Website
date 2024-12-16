@@ -1,23 +1,46 @@
 home=fluidPage(
   fluidRow(class = "MainRow",
      column(8,
-        column(12,  h1("Welcome to Wormbiome", style="color:white;font-family: 'Montserrat', sans-serif;"),
+        column(12,  h1("Welcome to Wormbiome", style="color:white;font-family: 'Montserrat', sans-serif; font-weight: 500;"),
                style="background-color:#29313f;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;"),
         column(12, p("Wormbiome is a database dedicated to collecting genomes associated with  C. elegans! This database is a comprehensive collection of bacterial genomes related to the C. elegans nematode. This powerful model organism is naturally colonized by diverse bacteria, making it an ideal system for studying the interactions between host and microbes. With this database, researchers can access the genetic information of these associated bacteria and use it to understand the role of the microbiome in shaping host physiology and physiology and its implications for human health. Explore the relationships between different bacterial species, and track the spread of antibiotic-resistant strains. Dive into the metabolic pathways and biochemistry of the organisms and discover new applications in biotechnology and synthetic biology. Join us in unraveling the secrets of the C. elegans microbiome, and unlock the potential of this powerful model organism."),
                style="padding-top:1em")
      ),
      column(4,
-        column(12, h1("News", style="color:white;font-family: 'Montserrat', sans-serif;"),
+            column(12,h1("News", style="color:white;font-family: 'Montserrat', sans-serif; font-weight: 500;"),
                style="background-color:#ea8b8b;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;"),
-        column(12,
-               uiOutput("newsMarkdown"),
+            column(12,uiOutput("newsMarkdown"),
                style="padding-top:1em")
      ),
   ),
+  fluidRow(class = "NumberRow",
+           column(6,
+                  column(12,  h1("In the Database", style="color:white;font-family: 'Montserrat', sans-serif; font-weight: 500;"),
+                         style="background-color:#29313f;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;")),
+           column(12,  
+             div(style = "padding-top:1em;display: flex; justify-content: center; align-items: center; height: 100%;", 
+               column(3,
+                 div(p(paste(length(ugenome), "Genomes")),
+                     style = "font-size: 24px; text-align: center; 
+                     font-family: 'Montserrat', sans-serif; font-weight: 900; 
+                     padding: 10px; border-radius: 10px; box-shadow: -5px 5px #e2e2e2;
+                     margin: 0; height: 50%;"
+                 )),
+               column(3,
+                 div(p(paste(length(unique(phylo$Genus)), "Genera")),
+                     style = "font-size: 24px; text-align: center; font-family: 'Montserrat', sans-serif; font-weight: 900; padding: 10px; border-radius: 10px; box-shadow: -5px 5px #e2e2e2;margin: 0; height: 50%;"
+                 )),
+               column(3,
+                 div(p(paste(ugenes, "Annotations")),
+                     style = "font-size: 24px; text-align: center; font-family: 'Montserrat', sans-serif; font-weight: 900; padding: 10px; border-radius: 10px; box-shadow: -5px 5px #e2e2e2;margin: 0; height: 50%;"
+                     ))
+             ))
+  ),
+  br(),
   fluidRow(class = "FunctionRow",
      column(4,style="height:15em",
         column(12,
-               h3("Browse the collection", style="color:white;font-family: 'Montserrat', sans-serif;"),
+               h3("Browse the collection", style="color:white;font-family: 'Montserrat', sans-serif; font-weight: 500;"),
                style="background-color:#29313f;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;"),
         column(12, 
                p("Look for the available bacteria in the collection and their associated metadata"),
@@ -26,7 +49,7 @@ home=fluidPage(
    ),
      column(4,style="height:15em",
         column(12,
-               h3("Search Gene", style="color:white;font-family: 'Montserrat', sans-serif;"),
+               h3("Search Gene", style="color:white;font-family: 'Montserrat', sans-serif; font-weight: 500;"),
                style="background-color:#29313f;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;"),
         column(12,
                p("Look for a specific gene and its distribution accross the available bacteria"),
@@ -36,7 +59,7 @@ home=fluidPage(
      ),
      column(4,style="height:15em",
         column(12,
-               h3("Browse Genomes", style="color:white;font-family: 'Montserrat', sans-serif;"),
+               h3("Browse Genomes", style="color:white;font-family: 'Montserrat', sans-serif; font-weight: 500;"),
                style="background-color:#29313f;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;"),
         column(12,
                p("Explore the genetic annotations for one or a group of bacteria"),
@@ -48,22 +71,12 @@ home=fluidPage(
                style="padding-top:1em")
      )
   ),
-  fluidRow(
-    column(4),
-    column(4,
-    h3("Featured Bacteria", style="color:white;font-family: 'Montserrat', sans-serif;"), 
-    img(src="BH3.png", style="  display: block;  margin-left: auto;  margin-right: auto;max-height: 30vh"),
-    style="background-color:#cacaca;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;",
-    p("")
-    ),
-    column(4)
-  )
 )
 
 
 PageDoc=fluidPage( 
   fluidRow(class = "PageDoc",
-           column(12, h2("Documentation", style="color:white;font-family: 'Montserrat', sans-serif;"), 
+           column(12, h2("Documentation", style="color:white;font-family: 'Montserrat', sans-serif; font-weight: 500;"), 
                   style="background-color:#29313f;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;"),
            column(12, 
                   includeMarkdown("https://raw.githubusercontent.com/aassie/WormBiome_Website/refs/heads/main/static/Manual.md"),
@@ -108,13 +121,15 @@ geneListUI= function(ida,phylo,ugenome){
                                 ),multiple=T
              ),
              ),
-             div(selectizeInput(NS(ida,"genus"), "Genus:",
-                                choices =   unique(phylo$Genus),
-                                options = list(
-                                  placeholder = 'Please select an option below',
-                                  onInitialize = I('function() { this.setValue(""); }')
-                                ),multiple=T
-             ),
+             div(style = "display: flex; flex-direction: column; height: 100%; justify-content: space-between;",
+                 div(selectizeInput(NS(ida, "GLTL"), "Taxonomic filtering (optional):",
+                                    choices = colnames(phylo)[-c(1, 2, 8)],
+                                    options = list(
+                                      placeholder = 'Please select an option below',
+                                      onInitialize = I('function() { this.setValue("Phyla"); }')),
+                                    multiple = FALSE)
+                 ),
+                 div(uiOutput(NS(ida, "GLTL.second"))),
              ),
              actionButton(NS(ida,"selectGene"), "Select Gene(s)"),
              actionButton(NS(ida,"resetGene"), "Clear Gene(s)"),
@@ -221,19 +236,16 @@ genseSearchUI <- function(ida, phylo, utable, ugenome) {
     tags$hr(),
     fluidRow(
       # Third Row: Actions
-      column(
-        width = 12,
-        div(style = "display: flex; justify-content: center;align-items: center",
-            actionButton(NS(ida, "selectGene"), "Select Gene(s)"),
-            actionButton(NS(ida, "resetGene"), "Clear Gene(s)"),
-            downloadButton(NS(ida, "downloadSData"), "Download selected"),
-            downloadButton(NS(ida, "downloadAData"), "Download All")
-        )
-      )
-    ),
-    fluidRow(
-      h1("Results")
-    ),
+      column(width = 12,
+             div(style = "display: flex; justify-content: center;align-items: center",
+                 actionButton(NS(ida, "selectGene"), "Select Gene(s)"),
+                 actionButton(NS(ida, "resetGene"), "Clear Gene(s)"),
+                 downloadButton(NS(ida, "downloadSData"), "Download selected"),
+                 downloadButton(NS(ida, "downloadAData"), "Download All"))
+             )
+            ),
+    fluidRow(h1("Results")
+             ),
     fluidRow(
       # Results Table
       div(
@@ -246,17 +258,45 @@ genseSearchUI <- function(ida, phylo, utable, ugenome) {
 
 userGeneCartUI<-function(ida,phylo,utable){
   fluidPage( 
-    fluidRow(column(10,
+    fluidRow(column(12,
+                    div(style = "display: flex; justify-content: center;align-items: center",
                     uiOutput(NS(ida,"uCartDescription")),
                     actionButton(NS(ida,"resetGene"), "Clear Gene(s)"),
                     downloadButton(NS(ida,"downloadSData"), "Download selected"),
                     downloadButton(NS(ida,"downloadAData"), "Download All"))
-    ),
-    fluidRow( column(12,
-                     reactableOutput(NS(ida,"userGeneCart"))
-    )
-    )
-  )
+             )),
+    fluidRow(column(12,
+                    reactableOutput(NS(ida,"userGeneCart"))
+             )),
+    hr(),
+    fluidRow(h3("Taxonomic Overview"),
+             column(12,
+             column(4,
+                    h4("Display option"),
+                    selectInput(NS(ida,"GCTaxLevel"), "Taxonomic Level:",
+                                c(colnames(phylo)[3:7],"Genome"))
+                    )),
+             column(4,
+                    reactableOutput(NS(ida,"GCTable1"))
+                     ),
+             column(8,
+                    plotly::plotlyOutput(NS(ida,"GCoverview1"))
+             )),
+     fluidRow(h3("Annotation Categories Overview"),
+              column(12,
+              column(4,
+                     h4("Display option"),
+                     selectInput(NS(ida,"GCgpby"), "Group by:",
+                                 c(colnames(phylo)[3:7],"Genome"))
+              )),
+              column(12,
+              column(4,
+                       reactableOutput(NS(ida,"GCTable2"))
+              ),
+              column(8,
+                     plotly::plotlyOutput(NS(ida,"GCoverview2"))
+                     )
+             )))
 }
 
 comparatorUI<- function(ida,phylo,kegg,tree,p_tree,ugenome){

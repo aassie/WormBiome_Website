@@ -24,6 +24,7 @@ wbdb <- dbConnect(
 )
 #Get genome names
 ugenome=pull((dbGetQuery(wbdb, "SELECT DISTINCT Genome FROM wb")))
+ugenes=pull((dbGetQuery(wbdb, "SELECT COUNT(DISTINCT WBM_geneID) FROM wb")))
 # Get wb column column names
 column_names <- dbGetQuery(wbdb, sprintf("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'", "wormbiome", "wb"))
 dbDisconnect(wbdb)
@@ -48,11 +49,11 @@ ui = fluidPage(
   id = "main_content",
   tags$script(src = "https://kit.fontawesome.com/a569dc8e47.js"),
   tags$head(
+    tags$link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;900&display=swap"),
     tags$link(rel="stylesheet", type="text/css",href="style.css"),
     tags$script(type="text/javascript", src = "busy.js"),
     tags$script(type="text/javascript",src="https://cdn-cookieyes.com/client_data/1f11ebb827a1be59b9f748b2/script.js",id="cookieyes"),
-    tags$style(HTML("
-                    .navbar-default .navbar-brand {color: cyan;}
+    tags$style(HTML(".navbar-default .navbar-brand {color: cyan;}
                     .navbar-default .navbar-brand:hover {color: blue;}
                     .navbar { background-color: #7a9ccc;}
                     .navbar-default .navbar-nav > li > a {color:white; display: flex;align-items: center;}
@@ -60,8 +61,7 @@ ui = fluidPage(
                     .navbar-default .navbar-nav > .active > a,
                     .navbar-default .navbar-nav > .active > a:focus,
                     .navbar-default .navbar-nav > .active > a:hover {color: black;background-color: #c6d7f4;}
-                    .navbar-default .navbar-nav > li > a:hover {color: white;background-color:#415368;text-decoration:underline;}
-                    "
+                    .navbar-default .navbar-nav > li > a:hover {color: white;background-color:#415368;text-decoration:underline;}"
     )),
     tags$script(HTML("
     <!-- Google tag (gtag.js) -->
@@ -188,7 +188,13 @@ server <- function(input, output, session) {
     updateTabsetPanel(session, inputId = "tabset", selected = "tab5")
   })
   
-  utable <- reactiveValues(x=tibble())
+  utable <- reactiveValues(x=tibble(
+    WBM_geneID = character(),  # Empty character column
+    Genome = character(),      # Empty character column
+    Bakta_ID = character(),    # Add other columns as needed
+    Contig_name = character(), # Empty character column
+    Bakta_product = character()# Add other columns as needed
+  ))
   output$panel=renderUI(input$tabset)
   observeEvent(input$controller, {
     updateTabsetPanel(session, "hidden_tabs", selected = paste0("panel", input$controller))
@@ -201,11 +207,8 @@ server <- function(input, output, session) {
     markdown_url <- "https://raw.githubusercontent.com/aassie/WormBiome_Website/main/static/News.md"
     response <- httr::GET(markdown_url)
     if (httr::status_code(response) == 200) {
-      # Save the markdown content to a temporary file
-      temp_md_file <- tempfile(fileext = ".md")
-      writeLines(content(response, "text"), temp_md_file)
       # Render the markdown in the UI
-      includeMarkdown(temp_md_file)
+      includeMarkdown(httr::content(response, "text"))
     } else {
       # Show an error message if the markdown can't be fetched
       h4("Unable to fetch the markdown from GitHub.")
