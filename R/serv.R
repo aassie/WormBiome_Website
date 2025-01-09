@@ -50,7 +50,7 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
         # Include these columns in the default selection along with some fixed columns
         default_selection <- unique(c("Genome", "WBM_geneID", default_columns))
         
-        checkboxGroupInput(NS(ida, "columns"), "Select columns to display:",
+        checkboxGroupInput(session$ns(ida, "columns"), "Select columns to display:",
                            choices = c("All", as.vector(unlist(column_names))),
                            selected = default_selection)
       })
@@ -122,7 +122,7 @@ genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
     function(input, output, session) {
       output$column_selector <- renderUI({
         default_selection <- unique(c("Genome", "WBM_geneID",  "Bakta_ID", "gapseq_ID", "IMG_ID", "PATRIC_ID", "Prokka_ID", "Contig_name","Bakta_product","IMG_product","PATRIC_product","Prokka_product"))
-        checkboxGroupInput(NS(ida, "Dcolumns"), "",
+        checkboxGroupInput(session$ns(ida, "Dcolumns"), "",
                            choices = c("All", as.vector(unlist(column_names))),
                            selected = default_selection)
       })
@@ -223,18 +223,6 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
   moduleServer(
     ida,
     function(input, output, session) {
-      #Kegg filter
-      output$secondSelection <- renderUI({
-        ns <- session$ns
-        selectizeInput(ns("filter2"), "Filter Kegg by:",
-                       choices =   unique(kegg %>% select(input$filter) %>% unique() %>% pull),
-                       options = list(
-                         placeholder = 'Please select an option below',
-                         onInitialize = I('function() { this.setValue(""); }')
-                       ),
-                       selected = character(0),
-                       multiple=T,)
-      })
       #Taxonomy Filter
       output$TL.second <- renderUI({
         ns <- session$ns
@@ -273,14 +261,89 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
         return(as.data.frame(tt)) 
         })
 
-      Rtable<-reactive(
-        if(is_empty(input$filter2)){
+      #Filtering genome table based on the kegg filtering if selected
+      
+      Rtable <- reactive({
+        if (is.null(last_selected())) {
           Ptable()
-        }else{
-          Ptable() %>% 
-            filter(get(input$filter) %in% input$filter2)
+        } else {
+          Ptable() %>%
+            filter(.data[[last_selected()$column]] %in% last_selected()$value)
         }
-      )
+      })
+      
+      #Section to select a kegg category
+      
+      # Initialize reactive value to store the last selected child and its column name
+      last_selected <- reactiveVal(list(column = NULL, value = NULL))
+      
+      # Populate the first dropdown with unique values from column A
+      updateSelectizeInput(session, "kolevel_A", choices = unique(kegg$A), server = TRUE)
+      
+      # Dynamically generate dropdown for Level B
+      output$dropdown_B <- renderUI({
+        req(input$kolevel_A)  # Ensure A is selected
+        filtered_B <- kegg %>%
+          filter(A %in% input$kolevel_A) %>%
+          pull(B) %>%
+          unique()
+        selectizeInput(session$ns("kolevel_B"), "Select Sub-categories:", choices = filtered_B, multiple = TRUE)
+      })
+      
+      # Dynamically generate dropdown for Level C
+      output$dropdown_C <- renderUI({
+        req(input$kolevel_B)  # Ensure B is selected
+        filtered_C <- kegg %>%
+          filter(B %in% input$kolevel_B) %>%
+          pull(C) %>%
+          unique()
+        selectizeInput(session$ns("kolevel_C"), "", choices = filtered_C, multiple = TRUE)
+      })
+      
+      # Dynamically generate dropdown for Level D
+      output$dropdown_D <- renderUI({
+        req(input$kolevel_C)  # Ensure C is selected
+        filtered_D <- kegg %>%
+          filter(C %in% input$kolevel_C) %>%
+          pull(D) %>%
+          unique()
+        selectizeInput(session$ns("kolevel_D"), "", choices = filtered_D, multiple = TRUE)
+      })
+      
+      # Dynamically generate dropdown for Level E
+      output$dropdown_E <- renderUI({
+        req(input$kolevel_D)  # Ensure D is selected
+        filtered_E <- kegg %>%
+          filter(D %in% input$kolevel_D) %>%
+          pull(E) %>%
+          unique()
+        selectizeInput(session$ns("kolevel_E"), "Select Sub-categories", choices = filtered_E, multiple = TRUE)
+      })
+      
+      # Dynamically generate dropdown for Level F
+      output$dropdown_F <- renderUI({
+        req(input$kolevel_E)  # Ensure E is selected
+        filtered_F <- kegg %>%
+          filter(E %in% input$kolevel_E) %>%
+          pull(F) %>%
+          unique()
+        selectizeInput(session$ns("kolevel_F"), "", choices = filtered_F, multiple = TRUE)
+      })
+      
+      # Dynamically generate dropdown for Level G
+      output$dropdown_G <- renderUI({
+        req(input$kolevel_F)  # Ensure F is selected
+        filtered_G <- kegg %>%
+          filter(F %in% input$kolevel_F) %>%
+          pull(G) %>%
+          unique()
+        selectizeInput(session$ns("kolevel_G"), "", choices = filtered_G, multiple = TRUE)
+      })
+      
+      # Output the last selected child and its column name
+      output$selected_categories <- renderPrint({
+        last_selected()
+      })
       
       #Interactive plotly for kegg levels
       output$StackBarData <- plotly::renderPlotly({
@@ -346,7 +409,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           Pres2<-labdsv::pco(P.dist, k=2)
           Kplot<-as.data.frame(Pres2$points) %>% 
             rownames_to_column("ID") %>% 
-            left_join(phylo)
+            left_join(phylo, by=)
           Keig1<- round(Pres2$eig[1]/sum(Pres2$eig)*100,2)
           Keig2<- round(Pres2$eig[2]/sum(Pres2$eig)*100,2)
           head(ptbl)
@@ -634,7 +697,7 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
 #Taxonomic filter option
 
 createTaxonomyFilterUI <- function(ns, phylo, Psource, target, selected = character(0)) {
-  selectizeInput(ns(target), "Subset Taxonomy by : (Optional)",
+  selectizeInput(session$ns(target), "Subset Taxonomy by : (Optional)",
                  choices = unique(phylo %>% select(all_of(Psource)) %>% unique() %>% pull),
                  options = list(
                    placeholder = 'Please select an option below',

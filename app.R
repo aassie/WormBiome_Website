@@ -118,7 +118,7 @@ ui = fluidPage(
         tags$span("Compare Features")
       ),
       value = "tab5",
-      comparatorUI("Comp",phylo,kegg,tree,p_tree,ugenome)),
+      comparatorUI("Comp",phylo,kegg,ugenome)),
       #Blast Tool
       tabPanel(tags$div(
         HTML("<i class=\"fas fa-dna\" data-fa-transform=\"right-6\"></i>

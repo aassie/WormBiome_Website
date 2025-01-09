@@ -299,64 +299,83 @@ userGeneCartUI<-function(ida,phylo,utable){
              )))
 }
 
-comparatorUI<- function(ida,phylo,kegg,tree,p_tree,ugenome){
+comparatorUI <- function(ida, phylo, kegg, ugenome) {
   ns <- NS(ida)
-  fluidPage( 
-    fluidRow( 
-      column(2,
-             div(
-               selectInput(NS(ida,"anot"), "Annotation track:",
-                           c("Bakta" = "Bakta"))),
-             div(
-               selectizeInput(NS(ida,"TL"), "Taxonomic level:",
-                              choices =   colnames(phylo)[-c(1,2,8)],
-                              options = list(
-                                placeholder = 'Please select an option below',
-                                onInitialize = I('function() { this.setValue("Phyla"); }')
-                              ),multiple=F)),
-             div(
-               uiOutput(NS(ida,"TL.second"))
-             ),
-             div(
-               selectizeInput(NS(ida,"genome"), "Add specific genome:",
-                              choices =   ugenome,
-                              options = list(
-                                placeholder = 'Please select an option below',
-                                onInitialize = I('function() { this.setValue(""); }')
-                              ),multiple=T)
-             ),
-             div(
-               selectizeInput(NS(ida,"kolevel"), "Kegg Level*:",
-                              choices =   colnames(kegg)[-c(8)],
-                              options = list(
-                                placeholder = 'Please select an option below',
-                                onInitialize = I('function() { this.setValue("A"); }')
-                              ),multiple=F),
-             ),
-             div(
-               selectizeInput(NS(ida,"filter"), "filter*:",
-                              choices =   colnames(kegg)[-c(8)],
-                              options = list(
-                                placeholder = 'Please select an option below',
-                                onInitialize = I('function() { this.setValue(""); }')
-                              ),multiple=F)
-             ),
-             div(
-               uiOutput(NS(ida,"secondSelection"))
-             )
-      ),
-      column(10,
-             plotly::plotlyOutput(NS(ida,"StackBarData"))
-      )
-    ),
+  fluidPage(
     fluidRow(
-      column(6,
-             plotly::plotlyOutput(NS(ida,"pcoa"))
+      column(
+        4,
+        # Annotation track
+        div(
+          selectInput(
+            ns("anot"), 
+            "Annotation track:",
+            choices = c("Bakta" = "Bakta")
+          )
+        ),
+        
+        # Taxonomic level
+        div(
+          selectizeInput(
+            ns("TL"), 
+            "Taxonomic level:",
+            choices = colnames(phylo)[-c(1, 2, 8)],
+            options = list(
+              placeholder = 'Please select an option below',
+              onInitialize = I('function() { this.setValue("Phyla"); }')
+            ), 
+            multiple = FALSE
+          )
+        ),
+        div(uiOutput(ns("TL.second"))),
+        
+        # Specific genome addition
+        div(
+          selectizeInput(
+            ns("genome"), 
+            "Add specific genome:",
+            choices = ugenome,
+            options = list(
+              placeholder = 'Please select an option below',
+              onInitialize = I('function() { this.setValue(""); }')
+            ), 
+            multiple = TRUE)
+        )),
+      column(
+        8,
+        # Hierarchical categories
+        div(
+          selectizeInput(
+            ns("kolevel_A"),
+            "Select Category:",
+            choices = NULL,
+            multiple = TRUE
+          )),
+        fluidRow(
+          column(4,uiOutput(ns("dropdown_B"))),
+          column(4,uiOutput(ns("dropdown_C"))),
+          column(4,uiOutput(ns("dropdown_D")))
+          ),
+        fluidRow(
+          column(4,uiOutput(ns("dropdown_E"))),
+          column(4,uiOutput(ns("dropdown_F"))),
+          column(4,uiOutput(ns("dropdown_G")))
+          ),
+      )),
+      
+      # Main outputs
+      fluidRow(
+        column(10,shinycssloaders::withSpinner(plotly::plotlyOutput(ns("StackBarData"))))
       ),
-      column(6,
-             plotOutput(NS(ida,"tree"))
+    
+    # Additional outputs
+    fluidRow(
+      column(6, shinycssloaders::withSpinner(plotly::plotlyOutput(ns("pcoa")))
       ),
-    ))
+      column(6, shinycssloaders::withSpinner(plotOutput(ns("tree")))
+      )
+    )
+  )
 }
 
 bacteriaListUI<- function(ida){
