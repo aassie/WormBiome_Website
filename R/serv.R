@@ -329,7 +329,6 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           genome_data <- do.call(rbind, lapply(seq_along(custom_selections), function(i) {
             group <- custom_selections[[i]]
             parent_taxa=input[[paste0("custom_taxonomic_groups_", i)]]
-            print(sym(parent_taxa))
             genomes <- unique(c(
               group$genomes,
               phylo %>%
@@ -365,8 +364,8 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           unnest(KO) %>%
           group_by(Genome, KO) %>%
           dplyr::summarise(kegcount = n(), .groups = "drop") %>%
-          left_join(kegg, relationship = "many-to-many") %>% 
-          left_join(gensel())
+          left_join(kegg, relationship = "many-to-many",by = "KO") %>% 
+          left_join(gensel(),by="Genome")
         
         # Apply filtering if necessary
         if (!is.null(selected_column) && !is.null(selected_value)) {
@@ -501,7 +500,8 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
             theme(axis.text.x = element_text(angle = 90)) +
             facet_grid(~Group, scales = "free",space = "free_y") +
             guides(fill = guide_legend(ncol = 1)) +
-            ylab("Percent")
+            ylab("Percent")+
+            scale_y_continuous(labels = scales::percent_format(scale = 100))
         }
         plotly::ggplotly(p,tooltip = "text")
       })})
@@ -530,7 +530,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           Pres2<-labdsv::pco(P.dist, k=2)
           Kplot<-as.data.frame(Pres2$points) %>% 
             rownames_to_column("ID") %>% 
-            left_join(phylo) %>% 
+            left_join(phylo,by="ID") %>% 
             left_join(gensel(), by=c("ID"="Genome"))
           Keig1<- round(Pres2$eig[1]/sum(Pres2$eig)*100,2)
           Keig2<- round(Pres2$eig[2]/sum(Pres2$eig)*100,2)
@@ -549,7 +549,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
             xlab(paste("Dimension 1", Keig1, "%",sep=" "))+
             ylab(paste("Dimension 2", Keig2, "%",sep=" "))+
             ggtitle("Principal Coordinates Analysis of Kegg predictions")+
-            scale_color_manual(values = getPal(colourCount), name="Genus")
+            scale_color_manual(values = getPal(colourCount), name="Group")
         }
         plotly::ggplotly(p2, tooltip = "text")
       })})
