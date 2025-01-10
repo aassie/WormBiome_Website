@@ -18,12 +18,13 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
           filter(ID %in% input$genome|get(input$GLTL) %in% input$GLTL2)%>% select(ID) %>% pull()
       })
       
+      # Empty tibble for the other functions
       tt=reactiveValues(x=tibble(
-        WBM_geneID = character(),  # Empty character column
-        Genome = character(),      # Empty character column
-        Bakta_ID = character(),    # Add other columns as needed
-        Contig_name = character(), # Empty character column
-        Bakta_product = character()# Add other columns as needed
+        WBM_geneID = character(),  
+        Genome = character(),      
+        Bakta_ID = character(),   
+        Contig_name = character(), 
+        Bakta_product = character()
       ))
       
       # Create the search result table
@@ -72,10 +73,6 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
                         pageInfo = "{rowStart} to {rowEnd} of {rows} entries",
                         pagePrevious = "\u276e",
                         pageNext = "\u276f",
-                        
-                        # Accessible labels for assistive technologies such as screen readers.
-                        # These are already set by default, but don't forget to update them when
-                        # changing visible text.
                         pagePreviousLabel = "Previous page",
                         pageNextLabel = "Next page")
                       )
@@ -92,10 +89,6 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
                         pageInfo = "{rowStart} to {rowEnd} of {rows} entries",
                         pagePrevious = "\u276e",
                         pageNext = "\u276f",
-                        
-                        # Accessible labels for assistive technologies such as screen readers.
-                        # These are already set by default, but don't forget to update them when
-                        # changing visible text.
                         pagePreviousLabel = "Previous page",
                         pageNextLabel = "Next page")
                       )
@@ -341,7 +334,6 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
         }
       })
       
-      
       #What Kegg is selected
       koname=reactive(paste0(input$anot,"_KO"))
       
@@ -362,6 +354,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
             KO = strsplit(KO, "\\|")
           ) %>%
           unnest(KO) %>%
+          separate_rows(Bakta_KO, sep = "\\|") %>%
           group_by(Genome, KO) %>%
           dplyr::summarise(kegcount = n(), .groups = "drop") %>%
           left_join(kegg, relationship = "many-to-many",by = "KO") %>% 
@@ -373,6 +366,25 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
             filter(get(selected_column) %in% selected_value)
         }
         as.data.frame(base_table)
+      })
+      
+      # Reactive variable for the aggregated dataframe
+      aggregatedData <- reactive({
+        if (is_empty(gensel()$Genome)) {
+          return(NULL)
+        } else {
+          # Filter and aggregate data
+          selected_column <- if (!is.null(last_selected()$column)) {
+            LETTERS[which(LETTERS == as.character(last_selected()$column), arr.ind = TRUE) + 1]
+          }
+          klvl <- sym(selected_column %||% "A")  # Default to "A" if no selection
+          
+          Rtable() %>%
+            group_by(Genome, !!klvl, Group) %>%
+            dplyr::summarise(kegcount = sum(kegcount), .groups = "drop") %>%  
+            filter(!is.na(!!klvl)) %>% 
+            left_join(phylo, by = c("Genome" = "ID"))
+        }
       })
       
       #Section to select a kegg category
@@ -459,56 +471,49 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
         return(list(column = NULL, value = NULL))
       })
       
-      #Interactive plotly for kegg levels
-      output$StackBarData <- plotly::renderPlotly({
-        withProgress(message = "Creating Stack Barplot...", value = 0, {
-        if (is_empty(gensel()$Genome)) {
+      #Create stackbar plot
+      StackBarData<-reactive({withProgress(message = "Creating Stack Barplot...", value = 0, {
+        p.data <- aggregatedData()  
+        if (is.null(p.data)) {
           p <- ggplot() +
             theme_void() +
             geom_text(aes(0, 0, label = "Please select a genome")) +
             xlab(NULL)
         } else {
-          #Filter all to simple dataframe
-          selected_column <- if(!is.null(last_selected()$column)){LETTERS[which(LETTERS==as.character(last_selected()$column), arr.ind = T)+1]}
-          klvl <- sym(selected_column %||% "A")  # Default to "A" if no selection
-          
-          #Generate the simple datafame
-          p <- Rtable() %>%
-            group_by(Genome, !!klvl,Group) %>%
-            dplyr::summarise(kegcount = sum(kegcount), .groups = "drop") %>%  
-            filter(!is.na(!!klvl)) %>% 
-            left_join(phylo, by = c("Genome" = "ID"))
-          #Generate legend to wrap
-          pl = p %>% 
-            select(!!klvl) %>% 
+          # Generate legend to wrap
+          selected_column <- if (!is.null(last_selected()$column)) {
+            LETTERS[which(LETTERS == as.character(last_selected()$column), arr.ind = TRUE) + 1]
+          }
+          pl <- p.data %>%
+            select(!!sym(selected_column%||% "A")) %>% 
             pull()
-          #Plot
-          p <- p %>%
-            mutate(legend=str_wrap(pl, width = 20)) %>% 
-            ggplot(aes(x = Genome,
-                       y = kegcount,
-                       fill = legend,
-                       text = paste(
-                         "Genome:", Genome,
-                         "<br>Kegg Count:", kegcount,
-                         "<br>Level:", legend
-                         )
-                       )
-                   ) +
+          
+          # Plot
+          p.data %>%
+            mutate(legend = str_wrap(pl, width = 20)) %>% 
+            ggplot(aes(
+              x = Genome,
+              y = kegcount,
+              fill = legend,
+              text = paste(
+                "Genome:", Genome,
+                "<br>Kegg Count:", kegcount,
+                "<br>Level:", legend
+              )
+            )) +
             geom_bar(alpha = 1, stat = "identity", position = "fill") +
             theme_minimal() +
             theme(axis.text.x = element_text(angle = 90)) +
-            facet_grid(~Group, scales = "free",space = "free_y") +
+            facet_grid(~Group, scales = "free", space = "free_y") +
             guides(fill = guide_legend(ncol = 1)) +
-            ylab("Percent")+
+            ylab("Percent") +
             scale_y_continuous(labels = scales::percent_format(scale = 100))
         }
-        plotly::ggplotly(p,tooltip = "text")
-      })})
-      
-      
+      })
+      })
+
       #Principal component analysis
-      output$pcoa <- plotly::renderPlotly({
+      pcoaplot=reactive({
         withProgress(message = "Creating PCoA Plot...", value = 0, {
         if(length(unique(gensel()$Genome))<3){
           p2=ggplot() +
@@ -551,7 +556,6 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
             ggtitle("Principal Coordinates Analysis of Kegg predictions")+
             scale_color_manual(values = getPal(colourCount), name="Group")
         }
-        plotly::ggplotly(p2, tooltip = "text")
       })})
       #Phylogenetic tree display
       grp <- reactive({
@@ -564,7 +568,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           selected = tibtree$label[tibtree$label %in% genome_list]
         )
       })
-      output$tree <- renderPlot({
+      treeplot = reactive({
         validate(
           need(!is.null(grp()), "Group data is missing."),
           need(length(grp()$selected) > 0, "No genomes selected.")
@@ -575,6 +579,53 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           theme(legend.position = "none") +
           scale_color_manual(values = c("orangered1", "gray80"), breaks = c("selected", "not.selected"))
       })
+      
+      #Output for the Interactive plotly for the plots above
+      output$StackBarData <- plotly::renderPlotly({plotly::ggplotly(StackBarData(), tooltip = "text")})
+      output$pcoa <- plotly::renderPlotly({plotly::ggplotly(pcoaplot(), tooltip = "text")})
+      output$tree <- renderPlot({treeplot()})
+      
+      #Download Buttons
+      output$downloadRawData <- downloadHandler(
+        filename = function() {
+          paste("WormBiome-Comparator-Raw-", Sys.Date(), ".csv", sep = "")
+        },
+        content = function(file) {
+          write_csv(Rtable() %>% 
+                      select(Genome,KO,kegcount) %>%
+                      unique(), file)
+        }
+      )
+      output$downloadAggData <- downloadHandler(
+        filename = function() {
+          paste("WormBiome-Comparator-Aggregated-", Sys.Date(), ".csv", sep = "")
+        },
+        content = function(file) {
+          write_csv(aggregatedData(), file)
+        }
+      )
+      fullplot= reactive({
+        ggpubr::ggarrange(
+          StackBarData(), 
+          ggpubr::ggarrange(
+            pcoaplot(), treeplot(),
+            labels = c("", "C"),
+            ncol = 2, nrow = 1),
+          labels = c("A", "B"),
+          ncol = 1, nrow = 2
+        )
+      }) 
+      output$downloadPics <- downloadHandler(
+        filename = function() {
+          paste("Combined_Plot_", Sys.Date(), ".pdf", sep = "")
+          },
+        content = function(file) {
+          ggsave(file, 
+                 plot = fullplot(),
+                 device = "pdf",
+                 width = 12, height = 8, dpi = 300)
+      }
+      )
     }
   )
 }
