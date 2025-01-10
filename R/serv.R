@@ -50,7 +50,7 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
         # Include these columns in the default selection along with some fixed columns
         default_selection <- unique(c("Genome", "WBM_geneID", default_columns))
         
-        checkboxGroupInput(session$ns(ida, "columns"), "Select columns to display:",
+        checkboxGroupInput(session$ns("columns"), "Select columns to display:",
                            choices = c("All", as.vector(unlist(column_names))),
                            selected = default_selection)
       })
@@ -59,7 +59,6 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
       output$data <- renderReactable({
         dt<-Rtable()
         if(nrow(dt)>0){
-          #print(input$columns)
           if ("All" %in% input$columns) {
             reactable(dt,
                       searchable = TRUE,
@@ -120,9 +119,10 @@ genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
   moduleServer(
     ida,
     function(input, output, session) {
+      ns=session$ns
       output$column_selector <- renderUI({
         default_selection <- unique(c("Genome", "WBM_geneID",  "Bakta_ID", "gapseq_ID", "IMG_ID", "PATRIC_ID", "Prokka_ID", "Contig_name","Bakta_product","IMG_product","PATRIC_product","Prokka_product"))
-        checkboxGroupInput(session$ns(ida, "Dcolumns"), "",
+        checkboxGroupInput(session$ns("Dcolumns"), "",
                            choices = c("All", as.vector(unlist(column_names))),
                            selected = default_selection)
       })
@@ -132,7 +132,6 @@ genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
 
       #Taxonomy Filter Functions
       output$TL.second <- renderUI({
-        ns <- session$ns
         createTaxonomyFilterUI(ns,phylo,input$TL,"TL2")
       })
       
@@ -223,32 +222,142 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
   moduleServer(
     ida,
     function(input, output, session) {
+      ns <- session$ns
       #Taxonomy Filter
       output$TL.second <- renderUI({
-        ns <- session$ns
         createTaxonomyFilterUI(ns,phylo,input$TL,"TL2")
       })
+      
       #Get the annotation names based on which database is selected
       annotation=reactive(as.character(unlist(column_names))[str_detect(as.character(unlist(column_names)), pattern = input$anot)])
-      #Genome selection
-      gensel<-reactive(if(is_empty(input$TL)){
-        phylo %>% 
-          filter(ID %in% input$genome)%>% select(ID) %>% pull()
-      }else{
-        phylo %>% 
-          filter(ID %in% input$genome|get(input$TL) %in% input$TL2)%>% select(ID) %>% pull()
+      
+      output$custom_groups_ui <- renderUI({
+        req(input$custom_group_count)  # Ensure the number of groups is defined
+        group_count <- as.integer(input$custom_group_count)  # Convert input to integer
+        
+        if (group_count <= 0) return(NULL)  # If no groups are selected, return NULL
+        
+        # Generate UI for the specified number of groups
+        # Divide the space equally among the groups
+        group_width <- floor(12 / group_count)  # Each group gets an equal width column
+        
+        # Generate UI for the specified number of groups
+        group_ui <- lapply(1:group_count, function(i) {
+          column(
+            width = group_width,
+            div(
+              h4(paste("Group", i)),
+              selectizeInput(
+                ns(paste0("custom_genomes_group_", i)),
+                "Select Specific Genomes:",
+                choices = ugenome,
+                options = list(placeholder = 'Select genomes for this group'),
+                multiple = TRUE
+              ),
+              selectizeInput(
+                ns(paste0("custom_taxonomic_groups_", i)),
+                "Select Taxonomic Groups:",
+                choices = colnames(phylo)[-c(1, 2, 8)],
+                options = list(placeholder = 'Select taxonomic groups for this group')
+              ),
+              # Placeholder for dynamically rendered taxonomy filter UI
+              uiOutput(ns(paste0("custom_taxonomy_ui_", i)))
+            )
+          )
+        })
+        
+        # Wrap the UI in a fluidRow
+        do.call(fluidRow, group_ui)
       })
+      
+      # Dynamically render the taxonomy filter UI for each group
+      observe({
+        req(input$custom_group_count)  
+        group_count <- as.integer(input$custom_group_count)  
+        
+        for (i in 1:group_count) {
+          local({
+            group_idx <- i  # Capture the current value of `i`
+            
+            output[[paste0("custom_taxonomy_ui_", group_idx)]] <- renderUI({
+              req(input[[paste0("custom_taxonomic_groups_", group_idx)]])  # Ensure input exists
+              
+              createTaxonomyFilterUI(ns,phylo,
+                Psource = input[[paste0("custom_taxonomic_groups_", group_idx)]],
+                target = paste0("custom_taxonomic_groups_TL", group_idx))
+            })
+          })
+        }
+      })
+      
+      # Reactive to collect custom group selections
+      custom_groups <- reactive({
+        req(input$custom_group_count)
+        group_count <- input$custom_group_count
+        
+        lapply(1:group_count, function(i) {
+          list(
+            genomes = input[[paste0("custom_genomes_group_", i)]],
+            taxonomic_groups = input[[paste0("custom_taxonomic_groups_TL", i)]],
+            group=paste("Group",i)
+          )
+        })
+      })
+      
+      # Example: Display custom group selections in the UI
+      output$custom_group_output <- renderPrint({
+        custom_groups()
+      })
+      
+      #Genome selection
+      gensel <- reactive({
+        if (input$selection_mode == "taxonomy") {
+          if (is_empty(input$TL)) {
+            phylo %>%
+              filter(ID %in% input$genome) %>%
+              mutate(Group = "Taxonomy") %>%
+              select(Genome = ID, Group)
+          } else {
+            phylo %>%
+              filter(ID %in% input$genome | get(input$TL) %in% input$TL2) %>%
+              select(Genome = ID, Group = !!sym(input$TL))
+          }
+        } else if (input$selection_mode == "custom") {
+          custom_selections <- custom_groups()
+          if (length(custom_selections) == 0) return(data.frame(Genome = character(), Group = character()))
+          
+          genome_data <- do.call(rbind, lapply(seq_along(custom_selections), function(i) {
+            group <- custom_selections[[i]]
+            parent_taxa=input[[paste0("custom_taxonomic_groups_", i)]]
+            print(sym(parent_taxa))
+            genomes <- unique(c(
+              group$genomes,
+              phylo %>%
+                filter(!!sym(parent_taxa) %in% group$taxonomic_groups) %>%
+                pull(ID)
+            ))
+            tibble(Genome = genomes, Group = paste("Group", i))
+          }))
+          return(genome_data)
+        }
+      })
+      
+      
       #What Kegg is selected
       koname=reactive(paste0(input$anot,"_KO"))
       
-      #Genome table
-      Ptable<-reactive({
-        klvl <- sym(input$kolevel)
-        dbquery= paste0("SELECT WBM_geneID, Genome, ",
-                        paste0(annotation(), collapse = ", "),
-                        " FROM wb WHERE Genome IN ('", paste0(gensel(), collapse = "','"),"') ",
-                        "AND ",paste0(input$anot,"_ID")," != ''")
-        tt <- dbGetQuery(wbdb, dbquery) %>%
+      Rtable <- reactive({
+        selected_column <- last_selected()$column
+        selected_value <- last_selected()$value
+        
+        dbquery <- paste0(
+          "SELECT WBM_geneID, Genome, ",
+          paste0(annotation(), collapse = ", "),
+          " FROM wb WHERE Genome IN ('", paste0(gensel()$Genome, collapse = "','"), "') ",
+          "AND ", paste0(input$anot, "_ID"), " != ''"
+        )
+        
+        base_table <- dbGetQuery(wbdb, dbquery) %>%
           mutate(
             KO = ifelse(is.na(get(koname())), "No Annotations", get(koname())),
             KO = strsplit(KO, "\\|")
@@ -256,33 +365,25 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           unnest(KO) %>%
           group_by(Genome, KO) %>%
           dplyr::summarise(kegcount = n(), .groups = "drop") %>%
-          left_join(kegg, relationship = "many-to-many")
+          left_join(kegg, relationship = "many-to-many") %>% 
+          left_join(gensel())
         
-        return(as.data.frame(tt)) 
-        })
-
-      #Filtering genome table based on the kegg filtering if selected
-      
-      Rtable <- reactive({
-        if (is.null(last_selected())) {
-          Ptable()
-        } else {
-          Ptable() %>%
-            filter(.data[[last_selected()$column]] %in% last_selected()$value)
+        # Apply filtering if necessary
+        if (!is.null(selected_column) && !is.null(selected_value)) {
+          base_table <- base_table %>%
+            filter(get(selected_column) %in% selected_value)
         }
+        as.data.frame(base_table)
       })
       
       #Section to select a kegg category
-      
-      # Initialize reactive value to store the last selected child and its column name
-      last_selected <- reactiveVal(list(column = NULL, value = NULL))
-      
+
       # Populate the first dropdown with unique values from column A
       updateSelectizeInput(session, "kolevel_A", choices = unique(kegg$A), server = TRUE)
       
-      # Dynamically generate dropdown for Level B
+      # Dynamically generate dropdown for Levels B to G
       output$dropdown_B <- renderUI({
-        req(input$kolevel_A)  # Ensure A is selected
+        req(input$kolevel_A)  # Ensure the previous column is selected
         filtered_B <- kegg %>%
           filter(A %in% input$kolevel_A) %>%
           pull(B) %>%
@@ -290,9 +391,8 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
         selectizeInput(session$ns("kolevel_B"), "Select Sub-categories:", choices = filtered_B, multiple = TRUE)
       })
       
-      # Dynamically generate dropdown for Level C
       output$dropdown_C <- renderUI({
-        req(input$kolevel_B)  # Ensure B is selected
+        req(input$kolevel_B)  
         filtered_C <- kegg %>%
           filter(B %in% input$kolevel_B) %>%
           pull(C) %>%
@@ -300,9 +400,8 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
         selectizeInput(session$ns("kolevel_C"), "", choices = filtered_C, multiple = TRUE)
       })
       
-      # Dynamically generate dropdown for Level D
       output$dropdown_D <- renderUI({
-        req(input$kolevel_C)  # Ensure C is selected
+        req(input$kolevel_C)  
         filtered_D <- kegg %>%
           filter(C %in% input$kolevel_C) %>%
           pull(D) %>%
@@ -310,9 +409,8 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
         selectizeInput(session$ns("kolevel_D"), "", choices = filtered_D, multiple = TRUE)
       })
       
-      # Dynamically generate dropdown for Level E
       output$dropdown_E <- renderUI({
-        req(input$kolevel_D)  # Ensure D is selected
+        req(input$kolevel_D) 
         filtered_E <- kegg %>%
           filter(D %in% input$kolevel_D) %>%
           pull(E) %>%
@@ -320,9 +418,8 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
         selectizeInput(session$ns("kolevel_E"), "Select Sub-categories", choices = filtered_E, multiple = TRUE)
       })
       
-      # Dynamically generate dropdown for Level F
       output$dropdown_F <- renderUI({
-        req(input$kolevel_E)  # Ensure E is selected
+        req(input$kolevel_E)  
         filtered_F <- kegg %>%
           filter(E %in% input$kolevel_E) %>%
           pull(F) %>%
@@ -330,9 +427,8 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
         selectizeInput(session$ns("kolevel_F"), "", choices = filtered_F, multiple = TRUE)
       })
       
-      # Dynamically generate dropdown for Level G
       output$dropdown_G <- renderUI({
-        req(input$kolevel_F)  # Ensure F is selected
+        req(input$kolevel_F)  
         filtered_G <- kegg %>%
           filter(F %in% input$kolevel_F) %>%
           pull(G) %>%
@@ -341,28 +437,53 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
       })
       
       # Output the last selected child and its column name
-      output$selected_categories <- renderPrint({
-        last_selected()
+      last_selected <- reactive({
+        # List all kolevel inputs in order of hierarchy
+        levels <- list(
+          G = input$kolevel_G,
+          F = input$kolevel_F,
+          E = input$kolevel_E,
+          D = input$kolevel_D,
+          C = input$kolevel_C,
+          B = input$kolevel_B,
+          A = input$kolevel_A
+        )
+        
+        # Find the last non-null and non-empty level
+        for (level in names(levels)) {
+          if (!is.null(levels[[level]]) && length(levels[[level]]) > 0) {
+            return(list(column = level, value = levels[[level]]))
+          }
+        }
+        
+        # If none are selected, return NULL
+        return(list(column = NULL, value = NULL))
       })
       
       #Interactive plotly for kegg levels
       output$StackBarData <- plotly::renderPlotly({
         withProgress(message = "Creating Stack Barplot...", value = 0, {
-        if (is_empty(gensel())) {
+        if (is_empty(gensel()$Genome)) {
           p <- ggplot() +
             theme_void() +
             geom_text(aes(0, 0, label = "Please select a genome")) +
             xlab(NULL)
         } else {
-          klvl <- sym(input$kolevel)
+          #Filter all to simple dataframe
+          selected_column <- if(!is.null(last_selected()$column)){LETTERS[which(LETTERS==as.character(last_selected()$column), arr.ind = T)+1]}
+          klvl <- sym(selected_column %||% "A")  # Default to "A" if no selection
+          
+          #Generate the simple datafame
           p <- Rtable() %>%
-            group_by(Genome, !!klvl) %>%
+            group_by(Genome, !!klvl,Group) %>%
             dplyr::summarise(kegcount = sum(kegcount), .groups = "drop") %>%  
             filter(!is.na(!!klvl)) %>% 
             left_join(phylo, by = c("Genome" = "ID"))
+          #Generate legend to wrap
           pl = p %>% 
             select(!!klvl) %>% 
             pull()
+          #Plot
           p <- p %>%
             mutate(legend=str_wrap(pl, width = 20)) %>% 
             ggplot(aes(x = Genome,
@@ -378,7 +499,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
             geom_bar(alpha = 1, stat = "identity", position = "fill") +
             theme_minimal() +
             theme(axis.text.x = element_text(angle = 90)) +
-            facet_grid(~get(input$TL), scales = "free",space = "free_y") +
+            facet_grid(~Group, scales = "free",space = "free_y") +
             guides(fill = guide_legend(ncol = 1)) +
             ylab("Percent")
         }
@@ -389,10 +510,10 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
       #Principal component analysis
       output$pcoa <- plotly::renderPlotly({
         withProgress(message = "Creating PCoA Plot...", value = 0, {
-        if(length(gensel())<3){
+        if(length(unique(gensel()$Genome))<3){
           p2=ggplot() +
             theme_void() +
-            geom_text(aes(0,0,label="Please select two genomes or more")) +
+            geom_text(aes(0,0,label="Please select at least 2 groups/genomes or more")) +
             xlab(NULL)
         }else{
           #Debug
@@ -409,7 +530,8 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           Pres2<-labdsv::pco(P.dist, k=2)
           Kplot<-as.data.frame(Pres2$points) %>% 
             rownames_to_column("ID") %>% 
-            left_join(phylo, by=)
+            left_join(phylo) %>% 
+            left_join(gensel(), by=c("ID"="Genome"))
           Keig1<- round(Pres2$eig[1]/sum(Pres2$eig)*100,2)
           Keig2<- round(Pres2$eig[2]/sum(Pres2$eig)*100,2)
           head(ptbl)
@@ -417,10 +539,10 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
           
           p2=ggplot(Kplot, aes(x=V1,
                                y=V2,
-                               col=Genus,
+                               col=Group,
                                text = paste(
                                  "Genome:", ID,
-                                 "Genus:",Genus
+                                 "Group:",Group
                                ))) +
             geom_point()+
             theme_bw()+
@@ -431,20 +553,28 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
         }
         plotly::ggplotly(p2, tooltip = "text")
       })})
-
-      grp<-reactive(if(is_empty(gensel())){
-        ""
-      }else{
-        list(not.selected =tibtree$label[-c(which(tibtree$label %in% gensel()),187:348)],
-             selected     =tibtree$label[c(which(tibtree$label %in% gensel()))])
+      #Phylogenetic tree display
+      grp <- reactive({
+        genome_list <- gensel()$Genome
+        if (is.null(genome_list) || length(genome_list) == 0) {
+          return(list(not.selected = character(), selected = character()))
+        }
+        list(
+          not.selected = tibtree$label[!tibtree$label %in% genome_list],
+          selected = tibtree$label[tibtree$label %in% genome_list]
+        )
       })
-      output$tree <- renderPlot(groupOTU(p_tree, grp(), 'Species') +
-                                  aes(color=Species) +
-                                  geom_tiplab(size=2)+
-                                  theme(legend.position="none")+
-                                  scale_color_manual(values = c("orangered1","gray80"),
-                                                     breaks = c("selected","not.selected"))
-      )
+      output$tree <- renderPlot({
+        validate(
+          need(!is.null(grp()), "Group data is missing."),
+          need(length(grp()$selected) > 0, "No genomes selected.")
+        )
+        groupOTU(p_tree, grp(), 'Species') +
+          aes(color = Species) +
+          geom_tiplab(size = 2) +
+          theme(legend.position = "none") +
+          scale_color_manual(values = c("orangered1", "gray80"), breaks = c("selected", "not.selected"))
+      })
     }
   )
 }
@@ -697,13 +827,20 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
 #Taxonomic filter option
 
 createTaxonomyFilterUI <- function(ns, phylo, Psource, target, selected = character(0)) {
-  selectizeInput(session$ns(target), "Subset Taxonomy by : (Optional)",
-                 choices = unique(phylo %>% select(all_of(Psource)) %>% unique() %>% pull),
-                 options = list(
-                   placeholder = 'Please select an option below',
-                   onInitialize = I('function() { this.setValue(""); }')
-                 ),
-                 selected = selected,
-                 multiple = TRUE)
+  # Validate inputs
+  req(ns, phylo, Psource, target)
+  
+  # Create the UI
+  selectizeInput(
+    ns(target),  # Use the namespace function
+    "Subset Taxonomy by : (Optional)",
+    choices = unique(phylo %>% select(all_of(Psource)) %>% pull()),
+    options = list(
+      placeholder = 'Please select an option below',
+      onInitialize = I('function() { this.setValue(""); }')
+    ),
+    selected = selected,
+    multiple = TRUE
+  )
 }
 

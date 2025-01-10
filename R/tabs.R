@@ -303,8 +303,7 @@ comparatorUI <- function(ida, phylo, kegg, ugenome) {
   ns <- NS(ida)
   fluidPage(
     fluidRow(
-      column(
-        4,
+      column(4,
         # Annotation track
         div(
           selectInput(
@@ -313,36 +312,35 @@ comparatorUI <- function(ida, phylo, kegg, ugenome) {
             choices = c("Bakta" = "Bakta")
           )
         ),
-        
-        # Taxonomic level
+        # Selection Mode (Taxonomy or Custom Group)
         div(
-          selectizeInput(
-            ns("TL"), 
-            "Taxonomic level:",
-            choices = colnames(phylo)[-c(1, 2, 8)],
-            options = list(
-              placeholder = 'Please select an option below',
-              onInitialize = I('function() { this.setValue("Phyla"); }')
-            ), 
-            multiple = FALSE
+          radioButtons(
+            ns("selection_mode"),
+            "Select Genomes By:",
+            choices = c("Taxonomy" = "taxonomy", "Custom Group" = "custom"),
+            inline = TRUE
           )
         ),
-        div(uiOutput(ns("TL.second"))),
-        
-        # Specific genome addition
-        div(
-          selectizeInput(
-            ns("genome"), 
-            "Add specific genome:",
-            choices = ugenome,
-            options = list(
-              placeholder = 'Please select an option below',
-              onInitialize = I('function() { this.setValue(""); }')
-            ), 
-            multiple = TRUE)
-        )),
-      column(
-        8,
+        # Taxonomic selection panel (shown when "Taxonomy" is selected)
+        conditionalPanel(
+          condition = "input.selection_mode == 'taxonomy'",
+          ns = ns,
+          div(
+            selectizeInput(
+              ns("TL"),
+              "Taxonomic level:",
+              choices = colnames(phylo)[-c(1, 2, 8)],
+              options = list(
+                placeholder = 'Please select an option below',
+                onInitialize = I('function() { this.setValue("Phyla"); }')
+              ),
+              multiple = FALSE
+            )
+          ),
+          div(uiOutput(ns("TL.second")))
+        )
+      ),
+      column(8,
         # Hierarchical categories
         div(
           selectizeInput(
@@ -361,7 +359,24 @@ comparatorUI <- function(ida, phylo, kegg, ugenome) {
           column(4,uiOutput(ns("dropdown_F"))),
           column(4,uiOutput(ns("dropdown_G")))
           ),
-      )),
+      ),
+      column(12,
+             # Custom group selection panel (shown when "Custom Group" is selected)
+             conditionalPanel(
+               condition = "input.selection_mode == 'custom'",
+               ns = ns,
+               div(
+                 numericInput(
+                   ns("custom_group_count"),
+                   "Number of Groups:",
+                   value = 2,
+                   min = 2,
+                   max = 4
+                 )
+               ),
+              uiOutput(ns("custom_groups_ui"))
+             )
+             )),
       
       # Main outputs
       fluidRow(
