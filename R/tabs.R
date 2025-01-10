@@ -265,6 +265,21 @@ userGeneCartUI<-function(ida,phylo,utable){
                     downloadButton(NS(ida,"downloadSData"), "Download selected"),
                     downloadButton(NS(ida,"downloadAData"), "Download All"))
              )),
+    #Column Filter
+    fluidRow(
+      column(6,
+             div(selectInput(NS(ida,"UCAnnotDB"), "Annotation database:",
+                             c("Bakta" = "Bakta",
+                               "Prokka" = "Prokka",
+                               "IMG" = "IMG",
+                               "PATRIC" = "PATRIC"))),
+      ),
+      column(6,
+             div(style = "height: 200px; overflow-y: scroll;",  # Adjust height as necessary
+                 uiOutput(NS(ida, "UCcolumn_selector"))
+             ))
+    ),
+    #Table
     fluidRow(column(12,
                     reactableOutput(NS(ida,"userGeneCart"))
              )),

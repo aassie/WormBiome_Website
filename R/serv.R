@@ -1,4 +1,4 @@
-## Gene list per genome page
+## Annotation Browser per genome page
 genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
   moduleServer(
     ida,
@@ -681,14 +681,49 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
     function(input, output, session) {
       # Main Table
       output$userGeneCart <- renderReactable({
-        reactable(
-          utable$x,
-          searchable = TRUE,
-          filterable = TRUE,
-          selection = "multiple",
-          minRows = if(nrow(utable$x)<20){nrow(utable$x)}else{20},
-          defaultPageSize = 20
-        )
+        if (nrow(utable$x)>0){
+          if ("All" %in% input$columns) {
+            UCTable=utable$x
+          } else {
+            UCTable=utable$x %>% select(input$columns)
+          }
+          reactable(UCTable,
+                    searchable = TRUE,
+                    filterable = TRUE,
+                    selection="multiple",
+                    minRows = if(nrow(utable$x)<20){nrow(utable$x)}else{20},
+                    defaultPageSize = 20,
+                    language = reactableLang(
+                      searchPlaceholder = "Search...",
+                      noData = "No data available.",
+                      pageInfo = "{rowStart} to {rowEnd} of {rows} entries",
+                      pagePrevious = "\u276e",
+                      pageNext = "\u276f",
+                      pagePreviousLabel = "Previous page",
+                      pageNextLabel = "Next page"))
+        }else{
+          reactable(utable$x,
+                    language = reactableLang(
+                      searchPlaceholder = "Search...",
+                      noData = "Select a Genome or a taxnomic unit to begin",)
+          )
+        }
+      })
+      
+      output$UCcolumn_selector <- renderUI({
+        # Create a vector of column names that start with the selected Annotation database
+        selected_variable <- input$UCAnnotDB
+        default_columns <- grep(paste0("^", selected_variable), column_names$COLUMN_NAME, value = TRUE)
+        
+        print(selected_variable)
+        print(default_columns)
+        
+        # Include these columns in the default selection along with some fixed columns
+        default_selection <- unique(c("Genome", "WBM_geneID", default_columns))
+        
+        checkboxGroupInput(session$ns("columns"), "Select columns to display:",
+                           choices = c("All", as.vector(unlist(column_names))),
+                           selected = default_selection)
       })
       
       # Summary
@@ -721,6 +756,9 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
         }
       )
       
+      TaxSel=reactive(input$GCTaxLevel)
+      GCTaxSel=reactive(input$GCgpby)
+      
       # Display: Taxonomic Overview Table
       output$GCTable1 = renderReactable({
         if (is.null(utable$x) || nrow(utable$x) == 0) {
@@ -735,11 +773,12 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
           )
         } else {
           # Generate the actual table when utable$x is not empty
+          tsel=TaxSel()
           TaxoSummary <- utable$x %>% 
             left_join(phylo, by = c("Genome" = "ID")) %>%
-            select(Genome, Genus) %>%
+            select(Genome, Taxon = !!sym(tsel)) %>%  
             unique() %>% 
-            group_by(Genus) %>% 
+            group_by(Taxon) %>%  
             dplyr::summarise(Genome_Number = n(), .groups = "drop") %>% 
             arrange(desc(Genome_Number))
           
@@ -762,35 +801,36 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
           )
         } else {
           withProgress(message = "Creating Stack Barplot...", value = 0, {
+            tsel=TaxSel()
             utable$x %>% 
               left_join(phylo, by = c("Genome" = "ID")) %>%
-              select(Genome, Genus) %>%
+              select(Genome, Taxon = !!sym(tsel)) %>%
               unique() %>% 
-              group_by(Genus) %>% 
+              group_by(Taxon) %>% 
               dplyr::summarise(Genome_Number = n(), .groups = "drop") %>%
               arrange(desc(Genome_Number)) %>% 
               slice(1:10) %>% 
               plotly::plot_ly(
                 x = ~Genome_Number,
-                y = ~Genus,
-                color=~Genus,
+                y = ~Taxon,
+                color=~Taxon,
                 colors = RColorBrewer::brewer.pal(12, "Set3"),
                 type = "bar", orientation = "h"
               )%>%
-              plotly::layout(title = "Genus Distribution",
+              plotly::layout(title = paste(tsel,"Distribution"),
                              xaxis = list(title = "Count"),
-                             yaxis = list(title = "Genus", categoryorder = "total ascending"), # Order by value
-                             margin = list(l = 150, r = 30, t = 50, b = 120), # Add margins to center the plot
+                             yaxis = list(title = tsel, categoryorder = "total ascending"), 
+                             margin = list(l = 150, r = 30, t = 50, b = 120), 
                              legend = list(
                                orientation = "h",
-                               x = 0.5,                # Center the legend horizontally
-                               y = -0.2,               # Place legend below the plot
-                               xanchor = "center",     # Align to the center
+                               x = 0.5,                
+                               y = -0.2,               
+                               xanchor = "center",     
                                yanchor = "top",
-                               tracegroupgap = 5       # Add small spacing between legend items
+                               tracegroupgap = 5       
                              ),
                              showlegend = FALSE,
-                             autosize = TRUE          # Auto-adjust plot size
+                             autosize = TRUE        
               )
           })
         }
@@ -854,17 +894,17 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
               plotly::layout(title = "Category Distribution",
                              xaxis = list(title = "Count"),
                              yaxis = list(title = "Category", categoryorder = "total ascending"), 
-                             margin = list(l = 150, r = 30, t = 50, b = 120), # Add margins to center the plot
+                             margin = list(l = 150, r = 30, t = 50, b = 120), 
                              legend = list(
                                orientation = "h",
-                               x = 0.5,                # Center the legend horizontally
-                               y = -0.2,               # Place legend below the plot
-                               xanchor = "center",     # Align to the center
+                               x = 0.5,                
+                               y = -0.2,               
+                               xanchor = "center",     
                                yanchor = "top",
-                               tracegroupgap = 5       # Add small spacing between legend items
+                               tracegroupgap = 5       
                              ),
                              showlegend = FALSE,
-                             autosize = TRUE          # Auto-adjust plot size
+                             autosize = TRUE          
               )
           }
           )
