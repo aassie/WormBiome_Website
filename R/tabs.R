@@ -377,9 +377,14 @@ comparatorUI <- function(ida, phylo, kegg, ugenome) {
               uiOutput(ns("custom_groups_ui"))
              )
              )),
-      
-      # Main outputs
-      fluidRow(
+    #Download buttons
+    fluidRow(column(12,
+                    downloadButton(NS(ida,"downloadRawData"), "Download Raw data"),
+                    downloadButton(NS(ida,"downloadAggData"), "Download Aggregated data"),
+                    downloadButton(NS(ida,"downloadPics"), "Download Pictures")
+                    )),
+    # Main outputs
+    fluidRow(
         column(10,shinycssloaders::withSpinner(plotly::plotlyOutput(ns("StackBarData"))))
       ),
     
