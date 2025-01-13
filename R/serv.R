@@ -94,7 +94,7 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
                       )
             }
           }else{
-            reactable(dt,
+            reactable(dt %>% mutate(Genome=""),
                       language = reactableLang(
                         searchPlaceholder = "Search...",
                         noData = "Select a Genome or a taxnomic unit to begin",)
@@ -702,7 +702,7 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
                       pagePreviousLabel = "Previous page",
                       pageNextLabel = "Next page"))
         }else{
-          reactable(utable$x,
+          reactable(utable$x %>% mutate(Genome=""),
                     language = reactableLang(
                       searchPlaceholder = "Search...",
                       noData = "Select a Genome or a taxnomic unit to begin",)
@@ -850,11 +850,13 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
             class = "empty-message"
           )
         } else {
-          CatSummary=utable$x %>% 
-            separate_rows(Bakta_KO, sep = "\\|") %>%
-            filter(!is.na(Bakta_KO), Bakta_KO != "NA") %>%
-            group_by(Bakta_KO) %>%
-            dplyr::summarise(Gene_Number = n(), .groups = "drop") %>%
+          gcg=input$GCgpby
+          CatSummary <- utable$x %>% 
+            dplyr::rename(GCGroup = !!sym(gcg)) %>%  # Dynamically rename the column
+            separate_rows(GCGroup, sep = "\\|") %>%  # Separate rows by delimiter
+            filter(!is.na(GCGroup), GCGroup != "NA") %>%  # Filter out NA or "NA" strings
+            group_by(GCGroup) %>%  # Group by GCGroup
+            dplyr::summarise(Gene_Number = n(), .groups = "drop") %>%  # Summarize counts
             arrange(desc(Gene_Number))
           
           reactable(
@@ -875,18 +877,20 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
           )
         } else {
           withProgress(message = "Creating Stack Barplot...", value = 0, {
+            gcg=input$GCgpby
             gtp=utable$x %>% 
-              separate_rows(Bakta_KO, sep = "\\|") %>%
-              filter(!is.na(Bakta_KO), Bakta_KO != "NA") %>%
-              group_by(Bakta_KO) %>%
+              dplyr::rename(GCGroup = !!sym(gcg)) %>%
+              separate_rows(GCGroup, sep = "\\|") %>%
+              filter(!is.na(GCGroup), GCGroup != "NA") %>%
+              group_by(GCGroup) %>%
               dplyr::summarise(Gene_Number = n(), .groups = "drop") %>%
               arrange(desc(Gene_Number))
             
             gtp %>%
               slice(1:8) %>% 
               plotly::plot_ly(x = ~Gene_Number,
-                              y = ~Bakta_KO,
-                              color= ~Bakta_KO,
+                              y = ~GCGroup,
+                              color= ~GCGroup,
                               colors = RColorBrewer::brewer.pal(12, "Set3"),
                               type = "bar",
                               orientation = "h"

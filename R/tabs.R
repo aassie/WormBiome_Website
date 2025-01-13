@@ -109,7 +109,8 @@ geneListUI= function(ida,phylo,ugenome){
     fluidRow( 
       column(2,
              div(selectInput(NS(ida,"AnnotDB"), "Annotation database:",
-                             c("Bakta" = "Bakta",
+                             c("All"="All",
+                               "Bakta" = "Bakta",
                                "Prokka" = "Prokka",
                                "IMG" = "IMG",
                                "PATRIC" = "PATRIC"))),
@@ -302,7 +303,7 @@ userGeneCartUI<-function(ida,phylo,utable){
               column(4,
                      h4("Display option"),
                      selectInput(NS(ida,"GCgpby"), "Group by:",
-                                 c(colnames(phylo)[3:7],"Genome"))
+                                 c(ImpColumn,"Genome"),selected = "Bakta_KO")
               )),
               column(12,
               column(4,
