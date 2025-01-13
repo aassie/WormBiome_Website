@@ -52,7 +52,7 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
         default_selection <- unique(c("Genome", "WBM_geneID", default_columns))
         
         checkboxGroupInput(session$ns("columns"), "Select columns to display:",
-                           choices = c("All", as.vector(unlist(column_names))),
+                           choices = c("All", column_names$COLUMN_NAME[c(90,45,1:44,56:89)]),
                            selected = default_selection)
       })
       
@@ -116,7 +116,7 @@ genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
       output$column_selector <- renderUI({
         default_selection <- unique(c("Genome", "WBM_geneID",  "Bakta_ID", "gapseq_ID", "IMG_ID", "PATRIC_ID", "Prokka_ID", "Contig_name","Bakta_product","IMG_product","PATRIC_product","Prokka_product"))
         checkboxGroupInput(session$ns("Dcolumns"), "",
-                           choices = c("All", as.vector(unlist(column_names))),
+                           choices = c("All", column_names$COLUMN_NAME[c(90,45,1:44,56:89)]),
                            selected = default_selection)
       })
       
@@ -685,8 +685,9 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
           if ("All" %in% input$columns) {
             UCTable=utable$x
           } else {
-            UCTable=utable$x %>% select(input$columns)
+            UCTable=utable$x %>% select(all_of(input$columns))
           }
+          print(input$columns)
           reactable(UCTable,
                     searchable = TRUE,
                     filterable = TRUE,
@@ -702,10 +703,13 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
                       pagePreviousLabel = "Previous page",
                       pageNextLabel = "Next page"))
         }else{
-          reactable(utable$x %>% mutate(Genome=""),
-                    language = reactableLang(
-                      searchPlaceholder = "Search...",
-                      noData = "Select a Genome or a taxnomic unit to begin",)
+          reactable(
+            tibble(Message = "Select Genes"),
+            searchable = FALSE,
+            filterable = FALSE,
+            pagination = FALSE,
+            defaultPageSize = 1,
+            class = "empty-message"
           )
         }
       })
@@ -713,16 +717,13 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
       output$UCcolumn_selector <- renderUI({
         # Create a vector of column names that start with the selected Annotation database
         selected_variable <- input$UCAnnotDB
-        default_columns <- grep(paste0("^", selected_variable), column_names$COLUMN_NAME, value = TRUE)
-        
-        print(selected_variable)
-        print(default_columns)
-        
+        default_columns <- grep(paste0("^", selected_variable), ImpColumn, value = TRUE)
+
         # Include these columns in the default selection along with some fixed columns
         default_selection <- unique(c("Genome", "WBM_geneID", default_columns))
         
         checkboxGroupInput(session$ns("columns"), "Select columns to display:",
-                           choices = c("All", as.vector(unlist(column_names))),
+                           choices = c("All", column_names$COLUMN_NAME[c(90,45,1:44,56:89)]),
                            selected = default_selection)
       })
       

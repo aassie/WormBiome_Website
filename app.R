@@ -45,6 +45,16 @@ p_tree <- ggtree(trda2, layout = 'circular', branch.length='none')
 #Get x
 tibtree <- as_tibble(tree)
 
+ImpColumn=c("Bakta_Cazy",  "Bakta_EC",  "Bakta_Gene",  "Bakta_GO",
+            "Bakta_ID",  "Bakta_IS",  "Bakta_KEGG",  "Bakta_KO",
+            "Bakta_Name",  "Bakta_NCBIFam",  "Bakta_NCBIProtein",  "Bakta_PFAM",
+            "Bakta_product",  "Bakta_RefSeq",  "Bakta_UniParc",  "Bakta_UniRef",
+            "Bakta_VFDB",  "PATRIC_product",  "PATRIC_Pathway",  "PATRIC_subclass",  
+            "PATRIC_subsystem",   "PATRIC_superclass",  "Prokka_COG",  "Prokka_KO",
+            "Prokka_EC_number",  "Prokka_product",  "IMG_superfam",  "IMG_tigrfam",
+            "IMG_tmhmm",  "IMG_type",  "IMG_ko",  "IMG_pfam",
+            "IMG_cog",  "IMG_product",  "IMG_signalp")
+
 ui = fluidPage(
   id = "main_content",
   tags$script(src = "https://kit.fontawesome.com/a569dc8e47.js"),
