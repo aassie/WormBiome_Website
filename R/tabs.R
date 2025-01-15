@@ -78,8 +78,7 @@ PageDoc=fluidPage(
   fluidRow(class = "PageDoc",
            column(12, h2("Documentation", style="color:white;font-family: 'Montserrat', sans-serif; font-weight: 500;"), 
                   style="background-color:#29313f;border-radius: 10px;box-shadow: -5px 5px #e2e2e2;"),
-           column(12, 
-                  includeMarkdown("https://raw.githubusercontent.com/aassie/WormBiome_Website/refs/heads/main/static/Manual.md"),
+           column(12,uiOutput("Documentation"),
                   style="padding-top:1em"),
            tags$head(tags$style(".NewsRow{padding-top: 25px}"))
   )
@@ -104,68 +103,60 @@ PageContact=function(ida){
   )
 }
 
-geneListUI= function(ida,phylo,ugenome){
-  fluidPage( 
-    fluidRow( 
+geneListUI <- function(ida, phylo, ugenome) {
+  fluidPage(
+    tags$head(
+      tags$style(HTML("
+        .custom-button {
+          width: 100%;
+        }"))
+    ),
+    fluidRow(
       column(2,
-             div(selectInput(NS(ida,"AnnotDB"), "Annotation database:",
-                             c("All"="All",
-                               "Bakta" = "Bakta",
+             div(selectInput(NS(ida, "AnnotDB"), "Annotation database:",
+                             c("Bakta" = "Bakta",
                                "Prokka" = "Prokka",
                                "IMG" = "IMG",
-                               "PATRIC" = "PATRIC"))),
-             div(selectizeInput(NS(ida,"genome"), "Genome:",
-                                choices =   ugenome,
+                               "PATRIC" = "PATRIC")
+             )),
+             div(selectizeInput(NS(ida, "genome"), "Genome:",
+                                choices = ugenome,
                                 options = list(
                                   placeholder = 'Please select an option below',
                                   onInitialize = I('function() { this.setValue(""); }')
-                                ),multiple=T
-             ),
-             ),
+                                ), multiple = T
+             )),
              div(style = "display: flex; flex-direction: column; height: 100%; justify-content: space-between;",
                  div(selectizeInput(NS(ida, "GLTL"), "Taxonomic filtering (optional):",
                                     choices = colnames(phylo)[-c(1, 2, 8)],
                                     options = list(
                                       placeholder = 'Please select an option below',
-                                      onInitialize = I('function() { this.setValue("Phyla"); }')),
-                                    multiple = FALSE)
-                 ),
-                 div(uiOutput(NS(ida, "GLTL.second"))),
+                                      onInitialize = I('function() { this.setValue("Phyla"); }')
+                                    ),
+                                    multiple = FALSE
+                 )),
+                 div(uiOutput(NS(ida, "GLTL.second")))
              ),
-             actionButton(NS(ida,"selectGene"), "Select Gene(s)"),
-             actionButton(NS(ida,"resetGene"), "Clear Gene(s)"),
-             downloadButton(NS(ida,"downloadSData"), "Download selected"),
-             downloadButton(NS(ida,"downloadAData"), "Download All"),
-             tags$script(HTML("
-             $(document).on('shiny:inputchanged', function(event) {
-              if (event.name === 'columns') {
-               if (event.value.includes('All')) {
-                // Check all checkboxes
-                $('input:checkbox[name=\"columns[]\"]').prop('checked', true);
-               }
-             }
-            });
-            $(document).on('change', 'input:checkbox[name=\"columns[]\"]', function() {
-              // If 'All' is deselected, deselect all checkboxes
-              if (!this.checked && this.value === 'All') {
-                $('input:checkbox[name=\"columns[]\"]').prop('checked', false);
-              } else {
-              // If one of the specific checkboxes is deselected, make sure 'All' is deselected too
-              var allChecked = $('input:checkbox[name=\"columns[]\"]:not(:checked)').length == 1;
-              $('input:checkbox[name=\"columns[]\"][value=\"All\"]').prop('checked', allChecked);        
-              }
-            });
-            ")),
-             div(style = "height: 200px; overflow-y: scroll;",  # Adjust height as necessary
+             div(style = "display: flex; flex-direction: column;",
+                 actionButton(NS(ida, "selectGene"), "Select Gene(s)", class = "custom-button"),
+                 actionButton(NS(ida, "resetGene"), "Clear Gene(s)", class = "custom-button"),
+                 div(style="padding-top:10px",
+                   downloadButton(NS(ida, "downloadSData"), "Download selected", class = "custom-button"),
+                   downloadButton(NS(ida, "downloadAData"), "Download All", class = "custom-button")
+                 )
+             ),
+             h4("Select columns to display:"),
+             div(style = "height: 200px; overflow-y: scroll;padding-top:10px",  
                  uiOutput(NS(ida, "column_selector"))
-             ),
+             )
       ),
       column(10,
-             reactableOutput(NS(ida,"data"))
+             reactableOutput(NS(ida, "data"))
       )
     )
   )
 }
+
 
 genseSearchUI <- function(ida, phylo, utable, ugenome) {
   fluidPage(
@@ -276,7 +267,8 @@ userGeneCartUI<-function(ida,phylo,utable){
                                "PATRIC" = "PATRIC"))),
       ),
       column(6,
-             div(style = "height: 200px; overflow-y: scroll;",  # Adjust height as necessary
+            h4("Select columns to display:"),
+            div(style = "height: 200px; overflow-y: scroll;",
                  uiOutput(NS(ida, "UCcolumn_selector"))
              ))
     ),
@@ -469,13 +461,6 @@ blastUI<- function(ida, custom_db,wb,phylo,ugenome){
           selectInput(NS(ida,"eval"), "e-value:", choices=c(1,0.001,1e-4,1e-5,1e-10), width="120px")),
       actionButton(NS(ida,"blast"), "BLAST!")
     ),
-    
-    #this snippet generates a progress indicator for long BLASTs
-    fluidRow(
-      div(class = "busy",  
-          p("Calculation in progress.."), 
-          img(src="https://i.stack.imgur.com/8puiO.gif", height = 100, width = 100,align = "center")
-      )),
     
     #Basic results output
     mainPanel(

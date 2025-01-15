@@ -141,10 +141,6 @@ ui = fluidPage(
       tags$i(class = "fa-solid fa-book"),
       tags$span("Documentation")),
       PageDoc),
-    #Download
-    tabPanel(tags$div(
-      tags$i(class = "fa-solid fa-download"),
-      tags$span("Download")), ),
     #Contact
     tabPanel(tags$div(
       tags$i(class = "fa-solid fa-envelope"),
@@ -211,10 +207,23 @@ server <- function(input, output, session) {
   })
   
   #Dynamic Markdown reading
-  
   output$newsMarkdown <- renderUI({
     # Fetch the markdown content on GitHub raw markdown URL
     markdown_url <- "https://raw.githubusercontent.com/aassie/WormBiome_Website/main/static/News.md"
+    response <- httr::GET(markdown_url)
+    if (httr::status_code(response) == 200) {
+      # Render the markdown in the UI
+      includeMarkdown(httr::content(response, "text"))
+    } else {
+      # Show an error message if the markdown can't be fetched
+      h4("Unable to fetch the markdown from GitHub.")
+    }
+  })
+  
+  #Documentation page
+  output$Documentation <- renderUI({
+    # Fetch the markdown content on GitHub raw markdown URL
+    markdown_url <- "https://raw.githubusercontent.com/aassie/WormBiome_Website/refs/heads/main/static/Manual.md"
     response <- httr::GET(markdown_url)
     if (httr::status_code(response) == 200) {
       # Render the markdown in the UI

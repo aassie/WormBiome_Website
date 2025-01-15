@@ -51,7 +51,7 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
         # Include these columns in the default selection along with some fixed columns
         default_selection <- unique(c("Genome", "WBM_geneID", default_columns))
         
-        checkboxGroupInput(session$ns("columns"), "Select columns to display:",
+        checkboxGroupInput(session$ns("columns"), "",
                            choices = c("All", column_names$COLUMN_NAME[c(90,45,1:44,56:89)]),
                            selected = default_selection)
       })
@@ -722,7 +722,7 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
         # Include these columns in the default selection along with some fixed columns
         default_selection <- unique(c("Genome", "WBM_geneID", default_columns))
         
-        checkboxGroupInput(session$ns("columns"), "Select columns to display:",
+        checkboxGroupInput(session$ns("columns"), "",
                            choices = c("All", column_names$COLUMN_NAME[c(90,45,1:44,56:89)]),
                            selected = default_selection)
       })
@@ -939,4 +939,6 @@ createTaxonomyFilterUI <- function(ns, phylo, Psource, target, selected = charac
     multiple = TRUE
   )
 }
+
+
 

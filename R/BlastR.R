@@ -37,6 +37,7 @@ blastServer <-  function(ida, custom_db,wb,phylo){
 
       #The great idea of a custom blast db creator
       blastresults <- eventReactive(input$blast, {
+        withProgress(message = "Running", value = 0, {
         #gather input and set up temp file
         query <- input$query
         tmp <- tempfile(fileext = ".fa")
@@ -60,24 +61,29 @@ blastServer <-  function(ida, custom_db,wb,phylo){
             system(paste0("/blast/bin/makeblastdb -in ", "./tmp/",buid,"/", buid,".fna -input_type fasta -title ",buid, " -dbtype nucl -out ./tmp/",buid,"/",buid))
             db <- paste0("./tmp/",buid,"/",buid)
             }
-
-      #this makes sure the fasta is formatted properly
-      if (startsWith(query, ">")){
-        writeLines(query, tmp)
-      } else {
-        writeLines(paste0(">Query\n",query), tmp)
-      }
-
-      #calls the blast
+        #this makes sure the fasta is formatted properly
+        if (startsWith(query, ">")){
+          writeLines(query, tmp)
+          } else {
+            writeLines(paste0(">Query\n",query), tmp)
+          }
+        blast_cmd=paste0("/Users/m3thyl/miniforge3/envs/ncbihack/bin/",input$program," -query ",tmp," -db ",db," -evalue ",input$eval," -outfmt 5 -max_hsps 1 -max_target_seqs 10 ")
+        #calls the blast
         #Can add a remote variable at the end of the paste0 to get a nr db for example
-      bdata <- system(paste0("/blast/bin/",input$program," -query ",tmp," -db ",db," -evalue ",input$eval," -outfmt 5 -max_hsps 1 -max_target_seqs 10 "), intern = T)
-      xmlParse(bdata)
-    }, ignoreNULL= T)
-
+        bdata <- tryCatch({
+          system(blast_cmd, intern = TRUE)
+          }, error = function(e) {
+            stop("BLAST failed: ", e$message)
+          })
+        
+        })}, ignoreNULL= T)
+        
       #clear tmp db files
-      reactive(if (input$bdb != "All"&exists("buid")){
-        system(paste0("rm -rf ./tmp/",buid))
-      })
+        observeEvent(input$blast, {
+          if (input$bdb != "All" && exists("buid")) {
+            system(paste0("rm -rf ./tmp/", buid))
+          }
+        })
 
     #Now to parse the results...
     parsedresults <- reactive({
@@ -101,11 +107,12 @@ blastServer <-  function(ida, custom_db,wb,phylo){
 
     #makes the datatable
     output$blastResults <- renderDataTable({
-      if (is.null(blastresults())){
+      if (is.null(parsedresults())) {
+        tibble(Message = "No BLAST results available")
       } else {
         parsedresults()
       }
-    }, selection="single")
+    }, selection = "single")
 
     #this chunk gets the alignemnt information from a clicked row
     output$clicked <- renderTable({
