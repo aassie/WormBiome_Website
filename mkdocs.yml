@@ -1,0 +1,46 @@
+site_name: WormBiome Website documentation
+repo_url: https://github.com/aassie/WormBiome_Website
+site_description: Documentation for the WormBiome Genome database
+site_author : Adrien Assié
+
+nav:
+  - Introduction: 'index.md'
+  - Website: 'website.md'
+  - Tutorials: 
+    - BiomeProfiler: 'biomeprofiler.md'
+    - Pangenomic Analysis: 'pangenomic.md'
+  - About : 'about.md'
+  - Submit a genome : submit.md
+  - 'Issue Tracker': 'https://github.com/aassie/WormBiome_Website/issues'
+
+theme:
+  name: material
+  logo: asset/WL.png  
+  features:
+    - navigation.path
+    - toc.integrate
+  
+icon:
+  admonition:
+      note: fontawesome/solid/note-sticky
+      abstract: fontawesome/solid/book
+      info: fontawesome/solid/circle-info
+      tip: fontawesome/solid/bullhorn
+      success: fontawesome/solid/check
+      question: fontawesome/solid/circle-question
+      warning: fontawesome/solid/triangle-exclamation
+      failure: fontawesome/solid/bomb
+      danger: fontawesome/solid/skull
+      bug: fontawesome/solid/robot
+      example: fontawesome/solid/flask
+      quote: fontawesome/solid/quote-left
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.blocks.caption
+  - attr_list
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
