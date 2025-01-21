@@ -61,7 +61,6 @@ ui = fluidPage(
   tags$head(
     tags$link(rel = "stylesheet", href = "https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;900&display=swap"),
     tags$link(rel="stylesheet", type="text/css",href="style.css"),
-    tags$script(type="text/javascript", src = "busy.js"),
     tags$script(type="text/javascript",src="https://cdn-cookieyes.com/client_data/1f11ebb827a1be59b9f748b2/script.js",id="cookieyes"),
     tags$style(HTML(".navbar-default .navbar-brand {color: cyan;}
                     .navbar-default .navbar-brand:hover {color: blue;}

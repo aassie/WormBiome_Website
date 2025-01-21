@@ -463,11 +463,23 @@ blastUI<- function(ida, custom_db,wb,phylo,ugenome){
     ),
     
     #Basic results output
-    mainPanel(
-      h4("Results"),
+    fluidRow(column(12,
+      h3("Results"),
       DT::dataTableOutput(NS(ida,"blastResults")),
+      plotOutput(ns("blast_plot"),height = "800px" ),
+      h4("Options:"),
+      column(12, #Display context size around blast result
+             numericInput(
+               inputId = ns("Blast_window_Size"),      
+               label = "Enter Context Window Size:",  
+               value = 2500,                    
+               min = 1000,                       
+               max = 10000,                    
+               step = 1000                     
+               ),
+             textOutput(ns("Blast_outputValue"))),        
       p("Alignment:", tableOutput(NS(ida,"clicked"))),
       verbatimTextOutput(NS(ida,"alignment"))
-    )
+    ))
   )
 }
