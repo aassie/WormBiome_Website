@@ -136,10 +136,10 @@ ui = fluidPage(
         value="tab3",
         blastUI("BL",custom_db,wbdb,phylo,ugenome))),
     #Documentation
-    tabPanel(tags$div(
-      tags$i(class = "fa-solid fa-book"),
-      tags$span("Documentation")),
-      PageDoc),
+    bslib::nav_item(a(href = "https://wormbiome-website.readthedocs.io/en/latest/",
+                    target = "_blank",
+                    tags$i(class = "fa-solid fa-book"),
+                    tags$span("Documentation"))),
     #Contact
     tabPanel(tags$div(
       tags$i(class = "fa-solid fa-envelope"),
@@ -147,6 +147,7 @@ ui = fluidPage(
       PageContact("PC")),
     #Gene Cart
     tabPanel(tags$div(
+      style = "display: inline-flex; align-items: center;",
       tags$i(class = "fa-solid fa-cart-shopping"),
       uiOutput(NS("GL","uCartLabel"))),
       userGeneCartUI("UGL",phylo,utable)
