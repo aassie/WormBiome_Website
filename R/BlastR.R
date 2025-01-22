@@ -21,72 +21,85 @@ create_unique_ids <- function(n, seed_no = sample(1:100000, 1), char_len = 5){
   res
 }
 
-blastServer <-  function(ida, custom_db,wb,phylo){
+blastServer <-  function(ida, custom_db,wbdb,phylo){
   moduleServer(
     ida,
     function(input, output, session){
       ns <- session$ns
+      
+      # Reactive value to store the custom database ID
+      temp_buid <- reactiveVal(NULL)
+      
+      # Generate UI for taxonomy filtering
       output$bsecond <- renderUI({
-        selectizeInput(ns("BTL2"), "Filter Taxonomy by:",
-                       choices =   unique(phylo %>% select(input$btaxa) %>% unique() %>% pull),
-                       options = list(
-                         placeholder = 'Please select an option below',
-                         onInitialize = I('function() { this.setValue(""); }')
-                       ),multiple=T)
+        createTaxonomyFilterUI(ns, phylo, input$btaxa, "BTL2")
       })
-      output$Blast_outputValue <- renderText({
-        paste("Window size:", input$Blast_window_Size)
-      })
-      #The great idea of a custom blast db creator
+      
+      # Blast processing and database creation
       blastresults <- eventReactive(input$blast, {
         withProgress(message = "Blasting...", value = 0, {
-        #gather input and set up temp file
-        query <- input$query
-        tmp <- tempfile(fileext = ".fa")
-        #if else chooses the right database
-        if (input$bdb == "All"){
-          db <- c("./blast/All.ref.fa")
-          remote <- c("")
-          }else{
-            #get the genome of interest
-            bgensel<-reactive(if(is_empty(input$btaxa)){
-              phylo %>%
-                filter(ID %in% input$bgenome)%>% select(ID) %>% pull()
-              }else{
-                phylo %>%
-                  filter(ID %in% input$bgenome|get(input$btaxa) %in% input$BTL2)%>% select(ID) %>% pull()
-                })
-            buid<-create_unique_ids(1)
-            #create temporary blastdb
-            system(paste0("mkdir tmp/",buid))
-            system(paste0("cat ", paste0("./fasta/",bgensel(),".fna", collapse = " ")," > ./tmp/",buid,"/", buid,".fna", collapse = " "))
-            system(paste0("/blast/bin/makeblastdb -in ", "./tmp/",buid,"/", buid,".fna -input_type fasta -title ",buid, " -dbtype nucl -out ./tmp/",buid,"/",buid))
-            db <- paste0("./tmp/",buid,"/",buid)
-            }
-        #this makes sure the fasta is formatted properly
-        if (startsWith(query, ">")){
-          writeLines(query, tmp)
+          # Gather input and set up temp file
+          query <- input$query
+          tmp <- tempfile(fileext = ".fa")
+          
+          # Determine the database to use
+          if (input$bdb == "All") {
+            db <- "./blast/All.ref.fa"
           } else {
-            writeLines(paste0(">Query\n",query), tmp)
+            # Get genome of interest for custom blast DB
+            bgensel <- if (is_empty(input$btaxa)) {
+              phylo %>%
+                filter(ID %in% input$bgenome) %>%
+                select(ID) %>%
+                pull()
+            } else {
+              phylo %>%
+                filter(ID %in% input$bgenome | get(input$btaxa) %in% input$BTL2) %>%
+                select(ID) %>%
+                pull()
+            }
+            
+            # Create unique ID for temp BLAST database
+            buid <- create_unique_ids(1)
+            temp_buid(buid)
+            
+            # Create temporary BLAST database
+            temp_dir <- paste0("./tmp/", buid)
+            system(paste0("mkdir -p ", temp_dir))
+            system(paste0("cat ", paste0("./fasta/", bgensel, ".fna", collapse = " "), " > ", temp_dir, "/", buid, ".fna"))
+            system(paste0("/Users/m3thyl/miniforge3/envs/ncbihack/bin/makeblastdb -in ", temp_dir, "/", buid, ".fna -input_type fasta -title ", buid, " -dbtype nucl -out ", temp_dir, "/", buid))
+            db <- paste0(temp_dir, "/", buid)
           }
-        blast_cmd=paste0("/Users/m3thyl/miniforge3/envs/ncbihack/bin/",input$program," -query ",tmp," -db ",db," -evalue ",input$eval," -outfmt 5 -max_hsps 1 -max_target_seqs 10 ")
-        #calls the blast
-        #Can add a remote variable at the end of the paste0 to get a nr db for example
-        bdata <- tryCatch({
-          system(blast_cmd, intern = TRUE)
+          
+          # Format the query for BLAST
+          if (startsWith(query, ">")) {
+            writeLines(query, tmp)
+          } else {
+            writeLines(paste0(">Query\n", query), tmp)
+          }
+          
+          # Run BLAST command
+          blast_cmd <- paste0("/Users/m3thyl/miniforge3/envs/ncbihack/bin/", input$program, " -query ", tmp, " -db ", db, " -evalue ", input$eval, " -outfmt 5 -max_hsps 1 -max_target_seqs 10")
+          bdata <- tryCatch({
+            system(blast_cmd, intern = TRUE)
           }, error = function(e) {
             stop("BLAST failed: ", e$message)
           })
-        
-        return(bdata)
-        })}, ignoreNULL= T)
-        
-      #clear tmp db files
-        observeEvent(input$blast, {
-          if (input$bdb != "All" && exists("buid")) {
-            system(paste0("rm -rf ./tmp/", buid))
-          }
+          
+          return(bdata)
         })
+      })
+      
+      # Observe BLAST results to trigger cleanup
+      observeEvent(blastresults(), {
+        buid <- temp_buid()
+        if (!is.null(buid)) {
+          temp_dir <- paste0("./tmp/", buid)
+          system(paste0("rm -rf ", temp_dir))
+          temp_buid(NULL) # Reset buid
+          cat("Temporary BLAST database removed:", temp_dir, "\n")
+        }
+      })
 
     #Now to parse the results...
     parsedresults <- reactive({
@@ -97,12 +110,21 @@ blastServer <-  function(ida, custom_db,wb,phylo){
 
       #the first chunk is for multi-fastas
       results <- xpathApply(xmltop, '//Iteration',function(row){
-        query_ID <- getNodeSet(row, 'Iteration_query-def') %>% sapply(., xmlValue)
-        hit_IDs <- getNodeSet(row, 'Iteration_hits//Hit//Hit_id') %>% sapply(., xmlValue)
+        query_ID <- getNodeSet(row, 'Iteration_hits//Hit//Hit_id') %>% sapply(., xmlValue)
+        ID <- getNodeSet(row, 'Iteration_hits//Hit//Hit_def') %>% sapply(., xmlValue)
         hit_length <- getNodeSet(row, 'Iteration_hits//Hit//Hit_len') %>% sapply(., xmlValue)
         bitscore <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_bit-score') %>% sapply(., xmlValue)
         eval <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_evalue') %>% sapply(., xmlValue)
-        cbind(query_ID,hit_IDs,hit_length,bitscore,eval)
+        
+        top <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_qseq') %>% sapply(., xmlValue)
+        mid <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_midline') %>% sapply(., xmlValue)
+        bottom <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_hseq') %>% sapply(., xmlValue)
+        
+        start <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_hit-from') %>% sapply(., xmlValue)
+        stop <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_hit-to') %>% sapply(., xmlValue)
+        
+        
+        cbind(query_ID,ID,hit_length,bitscore,eval,top,mid,bottom,start,stop)
       })
       #this ensures that NAs get added for no hits
       results <-  rbind.fill(lapply(results,function(y){as.data.frame((y),stringsAsFactors=FALSE)}))
@@ -114,45 +136,32 @@ blastServer <-  function(ida, custom_db,wb,phylo){
       if (is.null(parsedresults())) {
         tibble(Message = "No BLAST results available")
       } else {
-        parsedresults()
+        blasttable=parsedresults()[,1:5]
+        colnames(blasttable)<-c("Query ID","Contig Hit ID", "Length", "Bit Score", "e-value")
+        return(blasttable)
       }
     }, selection = "single")
 
-    #this chunk gets the alignemnt information from a clicked row
+    #this chunk gets the alignment information from a clicked row
     output$clicked <- renderTable({
       req(input$blastResults_rows_selected)
-      blastxml=xmlParse(paste(blastresults(), collapse = "\n"))
-      xmltop = xmlRoot(blastxml)
       clicked = input$blastResults_rows_selected
-      tableout<- data.frame(parsedresults()[clicked,])
-
+      tableout<- data.frame(parsedresults()[clicked,1:5])
       tableout <- t(tableout)
       names(tableout) <- c("")
-      rownames(tableout) <- c("Query ID","Hit ID", "Length", "Bit Score", "e-value")
+      rownames(tableout) <- c("Query ID","Contig Hit ID", "Length", "Bit Score", "e-value")
       colnames(tableout) <- NULL
       data.frame(tableout)
     },rownames =T,colnames =F)
 
     #this chunk makes the alignments for clicked rows
     output$alignment <- renderText({
-      #print("I am running")
       req(input$blastResults_rows_selected)
-      blastxml=xmlParse(paste(blastresults(), collapse = "\n"))
-      xmltop = xmlRoot(blastxml)
-
       clicked = input$blastResults_rows_selected
 
-      #loop over the xml to get the alignments
-      align <- xpathApply(xmltop, '//Iteration',function(row){
-        top <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_qseq') %>% sapply(., xmlValue)
-        mid <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_midline') %>% sapply(., xmlValue)
-        bottom <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_hseq') %>% sapply(., xmlValue)
-        rbind(top,mid,bottom)
-      })
-
-      #split the alignments every 50 carachters to get a "wrapped look"
-      alignx <- do.call("cbind", align)
-      splits <- strsplit(gsub("(.{50})", "\\1,", alignx[1:3,clicked]),",")
+      #split the alignments every 50 characters to get a "wrapped look"
+      align=parsedresults() %>% select(top,mid,bottom)
+      splits <- strsplit(gsub("(.{100})", "\\1,", align[clicked,1:3]),",")
 
       #paste them together with returns '\n' on the breaks
       split_out <- lapply(1:length(splits[[1]]),function(i){
@@ -162,29 +171,20 @@ blastServer <-  function(ida, custom_db,wb,phylo){
     })
     
     blast_data<-reactive({
-      req(blastresults())
-      blastxml=xmlParse(paste(blastresults(), collapse = "\n"))
-      xmltop = xmlRoot(blastxml)
+      req(parsedresults())
       
-      extractXML <- xpathApply(xmltop, '//Iteration',function(row){
-        ID <- getNodeSet(row, 'Iteration_hits//Hit/Hit_id') %>% sapply(., xmlValue)
-        start <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_hit-from') %>% sapply(., xmlValue)
-        stop <- getNodeSet(row, 'Iteration_hits//Hit//Hit_hsps//Hsp//Hsp_hit-to') %>% sapply(., xmlValue)
-        rbind(ID,start,stop)
-      })
-        
-      blastdt=reduce(extractXML, as.data.frame) %>%
-        t() %>% 
-        as_tibble() %>% 
+      blastdt=parsedresults() %>% 
+        select(ID,start,stop) %>% 
         mutate(start=as.numeric(start),
                stop=as.numeric(stop),
                orientation=ifelse(start<stop,"forward","reverse"),
-               tmp=ifelse(orientation=="reverse",start,stop),
-               tmp2=ifelse(orientation=="reverse",stop,start),
-               start=tmp2,
-               stop=tmp) %>% 
-        select(!c(tmp,tmp2))
-
+               start.tmp=ifelse(orientation=="reverse",stop,start),
+               stop.tmp=ifelse(orientation=="reverse",start,stop)) %>% 
+        select(!c(start,stop)) %>% 
+        dplyr::rename(start=start.tmp,stop=stop.tmp) %>% 
+        select(ID,start,stop,orientation) %>% 
+        as_tibble()
+      
       return(blastdt)
     })
     
@@ -199,25 +199,31 @@ blastServer <-  function(ida, custom_db,wb,phylo){
     
     blast_plot_click<-reactive({
       req(input$blastResults_rows_selected)
-
+      
       clicked = input$blastResults_rows_selected
       window_Size<-input$Blast_window_Size
       
-      max_contig_length=max(blast_data_context() %>% filter(Contig_name==pull(blast_data()[clicked,1])) %>% select(Bakta_end) %>% pull())
-      start_check=if(blast_data()[clicked,2]-window_Size>0){pull(blast_data()[clicked,2]-window_Size)}else{0}
-      stop_check=if(blast_data()[clicked,3]+window_Size<max_contig_length){pull(blast_data()[clicked,3]+window_Size)}else{max_contig_length}
+      contextdata=blast_data_context() %>% 
+        mutate(tmp=Bakta_start,
+               tmp2=Bakta_end,
+               stop=ifelse(tmp2>tmp,Bakta_end,Bakta_start),
+               start=ifelse(tmp<tmp2,tmp,tmp2)) %>% 
+        select(!c(tmp,tmp2))
       
-
-      tmp=blast_data_context() %>% 
-        select(Contig_name,Bakta_start,Bakta_end,Bakta_product,Bakta_type,Bakta_strand) %>% 
+      max_contig_length=max(contextdata %>% filter(Contig_name==pull(blast_data()[clicked,1])) %>% select(stop) %>% pull())
+      start_check=if((pull(blast_data()[clicked,2])-window_Size)>0){pull(blast_data()[clicked,2])-window_Size}else{0}
+      stop_check=if((pull(blast_data()[clicked,3])+window_Size)<max_contig_length){pull(blast_data()[clicked,3])+window_Size}else{max_contig_length}
+      
+      tmp=contextdata %>% 
+        select(Contig_name,start,stop,Bakta_product,Bakta_type,Bakta_strand) %>% 
         unique() %>% 
         filter(Contig_name==pull(blast_data()[clicked,1])) %>% 
-        filter(Bakta_start>start_check) %>% 
-        filter(Bakta_end<stop_check) %>% 
+        filter(start>start_check) %>% 
+        filter(stop<stop_check) %>% 
         mutate(orientation=ifelse(Bakta_strand=="+","forward","reverse"),
                Atype="Annotation") %>% 
         select(!Bakta_strand) %>% 
-        dplyr::rename(ID=Contig_name,start=Bakta_start,stop=Bakta_end,product=Bakta_product,type=Bakta_type)  %>% 
+        dplyr::rename(ID=Contig_name,product=Bakta_product,type=Bakta_type)  %>% 
         arrange(start)
       
       tt=tmp %>% 
@@ -229,37 +235,64 @@ blastServer <-  function(ida, custom_db,wb,phylo){
       return(tt)
       })
     
-    output$blast_plot=renderPlot({withProgress(message = "Rendering plot...", value = 0, {
-      if(is.null(input$blastResults_rows_selected)){
+    output$blast_plot=renderPlot({
+      if (is.null(input$blastResults_rows_selected)) {
         ggplot()+
           geom_text(data=tibble(x=0,y=0,label="Select alignment"),
                     aes(x=x,y=y,label=label))+theme_void()
       }else{
-        window_Size<-input$Blast_window_Size
-        clicked = input$blastResults_rows_selected
-        
-        max_contig_length=max(blast_data_context() %>% filter(Contig_name==pull(blast_data()[clicked,1])) %>% select(Bakta_end) %>% pull())
-        start_check=if(pull(blast_data()[clicked,2])-window_Size>0){pull(blast_data()[clicked,2])-window_Size}else{0}
-        stop_check=if(pull(blast_data()[clicked,3])+window_Size<max_contig_length){pull(blast_data()[clicked,3])+window_Size}else{max_contig_length}
-        
-        blast_plot_click() %>% 
-          ggplot(aes(xmin = start, xmax = stop, y = Atype, fill = type, forward=direction)) +
-          geom_segment(x=start_check,xend=stop_check,y="Annotation",yend="Annotation")+
-          gggenes::geom_gene_arrow()+
-          theme_minimal()+
-          scale_y_discrete(expand = c(1, 10), limits=c("Annotation","Blast_Result")) + #y label spacing to have blast result on top
-          theme(
-            axis.ticks.y = element_blank(),                
-            axis.line.y = element_blank(),
-            legend.position = "bottom",
-            axis.text.y = element_blank(),
-            panel.grid = element_blank()
-          )+
-          geom_text(data = blast_plot_click() %>% filter(Atype=="Annotation") %>% mutate(product=str_wrap(URLdecode(product), width=40,whitespace_only = FALSE)),aes(x = stop - ((stop-start)/2), y = -0.5, label = product, angle=90,hjust = 1, vjust=0.5), size=4)+
-          geom_text(data = blast_plot_click() %>% filter(Atype!="Annotation"),aes(x = stop - ((stop-start)/2), y = 0.2, label = product, angle=90,hjust = -1),col="salmon")+
-          labs(y="",x="Contig Position")
-        }
-    })})
+        withProgress(message = "Rendering plot...", value = 0, {
+          req(blast_plot_click())
+
+          window_Size<-input$Blast_window_Size
+          clicked = input$blastResults_rows_selected
+
+          contextdata=blast_data_context() %>% 
+            mutate(tmp=as.numeric(Bakta_start),
+                   tmp2=as.numeric(Bakta_end),
+                   stop=ifelse(tmp2>tmp,Bakta_end,Bakta_start),
+                   start=ifelse(tmp<tmp2,tmp,tmp2)) %>% 
+            select(!c(tmp,tmp2))
+          
+          max_contig_length=max(contextdata %>% filter(Contig_name==pull(blast_data()[clicked,1])) %>% select(stop) %>% pull())
+          start_check=if((pull(blast_data()[clicked,2])-window_Size)>0){pull(blast_data()[clicked,2])-window_Size}else{0}
+          stop_check=if((pull(blast_data()[clicked,3])+window_Size)<max_contig_length){pull(blast_data()[clicked,3])+window_Size}else{max_contig_length}
+          
+          blast_plot_click() %>% 
+            ggplot(aes(xmin = start, xmax = stop, y = Atype, fill = type, forward=direction)) +
+            geom_segment(x=start_check,xend=stop_check,y="Annotation",yend="Annotation")+
+            gggenes::geom_gene_arrow()+
+            theme_minimal()+
+            scale_y_discrete(expand = c(1, 10), limits=c("Annotation","Blast_Result")) + #y label spacing to have blast result on top
+            theme(
+              axis.ticks.y = element_blank(),                
+              axis.line.y = element_blank(),
+              legend.position = "bottom",
+              axis.text.y = element_blank(),
+              panel.grid = element_blank()
+            )+
+            geom_text(data = blast_plot_click() %>% filter(Atype=="Annotation") %>% mutate(product=str_wrap(URLdecode(product), width=40,whitespace_only = FALSE)),aes(x = stop - ((stop-start)/2), y = -0.5, label = product, angle=90,hjust = 1, vjust=0.5), size=4)+
+            geom_text(data = blast_plot_click() %>% filter(Atype!="Annotation"),aes(x = stop - ((stop-start)/2), y = 0.2, label = product, angle=90,hjust = -1),col="salmon")+
+            labs(y="",x="Contig Position")
+          })
+    }})
+    #Download buttons
+    output$downloadBlastData <- downloadHandler(
+      filename = function() {
+        paste("WormBiome-Blast-Raw-", Sys.Date(), ".csv", sep = "")
+      },
+      content = function(file) {
+        write_csv(parsedresults(),file)
+      }
+    )
+    output$downloadBlastContext <- downloadHandler(
+      filename = function() {
+        paste("WormBiome-Blast-Context-", Sys.Date(), ".csv", sep = "")
+      },
+      content = function(file) {
+        write_csv(blast_plot_click(),file)
+      }
+    )
     }
   )
 }
