@@ -34,7 +34,15 @@ home=fluidPage(
                  div(p(paste(ugenes, "Annotations")),
                      style = "font-size: 24px; text-align: center; font-family: 'Montserrat', sans-serif; font-weight: 900; padding: 10px; border-radius: 10px; box-shadow: -5px 5px #e2e2e2;margin: 0; height: 50%;"
                      ))
-             ))
+             )),
+           fluidRow(
+                    column(2),
+                    column(8,
+                           style="padding-top:1em",
+                           div(
+                           plotly::plotlyOutput("sankeyPlot",height = "800px"))),
+                    column(2)
+           )
   ),
   br(),
   fluidRow(class = "FunctionRow",
@@ -429,7 +437,7 @@ blastUI<- function(ida, custom_db,wb,phylo,ugenome){
     #This block gives us all the inputs:
     fluidRow(
       h1('Wormbiome Blast'),
-      p("looking for your sequence since 2023"),
+      p("looking for your sequences since 2023"),
       textAreaInput(NS(ida,'query'), 'Input sequence:', value = "", placeholder = "", width = "600px", height="200px"),
       selectInput(NS(ida,"bdb"), "Database:", choices=c("All","Custom"), width="120px"),
       #Where you can choose which genome to use

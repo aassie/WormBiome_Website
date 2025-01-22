@@ -220,18 +220,10 @@ server <- function(input, output, session) {
     }
   })
   
-  #Documentation page
-  output$Documentation <- renderUI({
-    # Fetch the markdown content on GitHub raw markdown URL
-    markdown_url <- "https://raw.githubusercontent.com/aassie/WormBiome_Website/refs/heads/main/static/Manual.md"
-    response <- httr::GET(markdown_url)
-    if (httr::status_code(response) == 200) {
-      # Render the markdown in the UI
-      includeMarkdown(httr::content(response, "text"))
-    } else {
-      # Show an error message if the markdown can't be fetched
-      h4("Unable to fetch the markdown from GitHub.")
-    }
+  output$sankeyPlot <- plotly::renderPlotly({
+    # Load the saved Plotly Sankey plot
+    sankey_plot <- readRDS(url("https://raw.githubusercontent.com/aassie/WormBiome_Website/main/static/home_plot1.RDS"))
+    sankey_plot # Return the plot object to render
   })
   
   genelistserv("GL", wbdb, column_names, phylo, utable, nrUTable)
@@ -243,3 +235,4 @@ server <- function(input, output, session) {
 
 print(proc.time()-start)
 app<-shinyApp(ui, server)
+
