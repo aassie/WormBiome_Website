@@ -1,5 +1,13 @@
+- *23 January 2025*:
+    - Major update pre-publication
+    - Information updated
+    - Most tools are improved
+    - Data made publicly available on Zenodo
+    - Dedicated documentation added
+    - Full list of updates [here]()
+
 - *27 June 2023*:
-    - C. elegans Meeting fixes
+    - _C. elegans_ Meeting fixes
 - *7 June 2023*:
     - Fixing broken blast
 - *30 May 2023*:

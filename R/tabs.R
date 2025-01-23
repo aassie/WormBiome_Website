@@ -1,3 +1,5 @@
+cat(file=stderr(),"Loading UI tabs\n")
+
 home=fluidPage(
   fluidRow(class = "MainRow",
      column(8,

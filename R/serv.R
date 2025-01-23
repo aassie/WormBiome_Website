@@ -1,3 +1,5 @@
+cat(file=stderr(),"Loading Modules\n")
+
 ## Annotation Browser per genome page
 genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
   moduleServer(
