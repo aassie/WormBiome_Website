@@ -556,7 +556,7 @@ comparatorserv<-function(ida,wbdb, column_names, kegg, phylo,p_tree,getPal=getPa
             xlab(paste("Dimension 1", Keig1, "%",sep=" "))+
             ylab(paste("Dimension 2", Keig2, "%",sep=" "))+
             ggtitle("Principal Coordinates Analysis of Kegg predictions")+
-            scale_color_manual(values = getPal(colourCount), name="Group")
+            scale_color_manual(values = ggpubr::get_palette(palette="aaas",colourCount), name="Group")
         }
       })})
       #Phylogenetic tree display

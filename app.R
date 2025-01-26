@@ -20,17 +20,8 @@ ui = fluidPage(
                     .navbar-default .navbar-nav > .active > a:hover {color: black;background-color: #c6d7f4;}
                     .navbar-default .navbar-nav > li > a:hover {color: white;background-color:#415368;text-decoration:underline;}"
     )),
-    tags$script(HTML("
-    <!-- Google tag (gtag.js) -->
-    <script async src='https://www.googletagmanager.com/gtag/js?id=G-140FXSDHXK'></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-    
-      gtag('config', 'G-140FXSDHXK');
-    </script>
-      "))),
+    includeHTML("www/ga.html")
+    ),
 
   navbarPage(
     collapsible = TRUE,
@@ -181,6 +172,7 @@ server <- function(input, output, session) {
   genseSearchServ("GS", wbdb, column_names, phylo, utable, ugenome, nrUTable)
 }
 
-print(proc.time()-start)
+cat(file=stderr(),"Loading time:\n")
+cat(file=stderr(),paste((proc.time()-start)[3],"\n"))
 app<-shinyApp(ui, server)
 

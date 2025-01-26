@@ -1,7 +1,4 @@
-require(XML)
-library(plyr)
-library(dplyr)
-library(DT)
+print("Loading Blast module")
 
 #unique id creator
 #taken from https://samfirke.com/2018/08/22/generating-unique-ids-using-r/
@@ -44,7 +41,7 @@ blastServer <-  function(ida, custom_db,wbdb,phylo){
           
           # Determine the database to use
           if (input$bdb == "All") {
-            db <- "./blast/All.ref.fa"
+            db <- paste0(srvloc,"blast/All.ref.fa")
           } else {
             # Get genome of interest for custom blast DB
             bgensel <- if (is_empty(input$btaxa)) {
@@ -64,10 +61,10 @@ blastServer <-  function(ida, custom_db,wbdb,phylo){
             temp_buid(buid)
             
             # Create temporary BLAST database
-            temp_dir <- paste0("./tmp/", buid)
+            temp_dir <- paste0(srvloc,"/tmp/", buid)
             system(paste0("mkdir -p ", temp_dir))
-            system(paste0("cat ", paste0("./fasta/", bgensel, ".fna", collapse = " "), " > ", temp_dir, "/", buid, ".fna"))
-            system(paste0("/Users/m3thyl/miniforge3/envs/ncbihack/bin/makeblastdb -in ", temp_dir, "/", buid, ".fna -input_type fasta -title ", buid, " -dbtype nucl -out ", temp_dir, "/", buid))
+            system(paste0("cat ", paste0(srvloc,"fasta/", bgensel, ".fna", collapse = " "), " > ", temp_dir, "/", buid, ".fna"))
+            system(paste0("makeblastdb -in ", temp_dir, "/", buid, ".fna -input_type fasta -title ", buid, " -dbtype nucl -out ", temp_dir, "/", buid))
             db <- paste0(temp_dir, "/", buid)
           }
           
@@ -79,7 +76,7 @@ blastServer <-  function(ida, custom_db,wbdb,phylo){
           }
           
           # Run BLAST command
-          blast_cmd <- paste0("/Users/m3thyl/miniforge3/envs/ncbihack/bin/", input$program, " -query ", tmp, " -db ", db, " -evalue ", input$eval, " -outfmt 5 -max_hsps 1 -max_target_seqs 10")
+          blast_cmd <- paste0(input$program, " -query ", tmp, " -db ", db, " -evalue ", input$eval, " -outfmt 5 -max_hsps 1 -max_target_seqs 10")
           bdata <- tryCatch({
             system(blast_cmd, intern = TRUE)
           }, error = function(e) {
@@ -94,7 +91,7 @@ blastServer <-  function(ida, custom_db,wbdb,phylo){
       observeEvent(blastresults(), {
         buid <- temp_buid()
         if (!is.null(buid)) {
-          temp_dir <- paste0("./tmp/", buid)
+          temp_dir <- paste0(srvloc,"tmp/", buid)
           system(paste0("rm -rf ", temp_dir))
           temp_buid(NULL) # Reset buid
           cat("Temporary BLAST database removed:", temp_dir, "\n")

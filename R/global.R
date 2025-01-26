@@ -10,12 +10,16 @@ library(ggtree)
 library(treeio)
 library(DBI)
 require(XML)
-library(plyr)
 library(dplyr)
 library(DT)
 
-#public database
-wormreader_password <- ""
+#Dev section
+## SQL password to public database
+wormreader_password <- Sys.getenv("KEY1")
+
+## File location
+srvloc="/srv/shiny-server/"
+#srvloc="./"
 
 custom_db<-"All.ref"
 print("Loading database")
@@ -37,14 +41,14 @@ column_names <- dbGetQuery(wbdb, sprintf("SELECT COLUMN_NAME FROM INFORMATION_SC
 dbDisconnect(wbdb)
 
 print("Loading phylogenies")
-phylo<-read_tsv("/srv/shiny-server/data/Bacteria_Phylogeny.txt",show_col_types = FALSE) %>% filter( ID %in% ugenome)
+phylo<-read_tsv(paste0(srvloc,"data/Bacteria_Phylogeny.txt"),show_col_types = FALSE) %>% filter( ID %in% ugenome)
 
 print("Loading metadata")
-kegg<-read_csv("/srv/shiny-server/data/Kegg.metadata.csv",show_col_types = FALSE) %>% select(!`...1`)
+kegg<-read_csv(paste0(srvloc,"data/Kegg.metadata.csv"),show_col_types = FALSE) %>% select(!`...1`)
 getPalette = colorRampPalette(RColorBrewer::brewer.pal(11, "Spectral"))
 #Load the tree
 print("Loading tree")
-tree<-read.tree("/srv/shiny-server/data/Phylogenomic.tre")
+tree<-read.tree(paste0(srvloc,"data/Phylogenomic.tre"))
 #Reroot tree
 trda2 <- root(tree, outgroup = "GCF_000011365.1_Bradyrhizobium_diazoefficiens_USDA110", edgelabel = TRUE)
 #Make a circular tree
