@@ -6,6 +6,7 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
     ida,
     function(input, output, session) {
       annotation=reactive(as.vector(unlist(column_names)[str_detect(unlist(column_names), pattern = input$AnnotDB)]))
+      IDfilter=reactive(paste0(input$AnnotDB,"_ID"))
       
       output$GLTL.second<-renderUI({
         ns=session$ns
@@ -38,12 +39,14 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
             }else{
               ts<-dbGetQuery(wbdb,paste0("SELECT *",
                                          " FROM wb WHERE Genome IN ('", paste0(gensel(), collapse = "','"),"') ",
-                                         "AND ",paste0(input$AnnotDB,"_ID")," != ''"))
+                                         "AND ",sym(IDfilter())," != ''")) %>% 
+                distinct(!!sym(IDfilter()), .keep_all = TRUE)
             }
             return(ts)
             })
           })
         })
+      
       
       output$column_selector <- renderUI({
         # Create a vector of column names that start with the selected Annotation database
@@ -54,7 +57,7 @@ genelistserv<-function(ida, wbdb, column_names, phylo,utable,nrUTable){
         default_selection <- unique(c("Genome", "WBM_geneID", default_columns))
         
         checkboxGroupInput(session$ns("columns"), "",
-                           choices = c("All", column_names$COLUMN_NAME[c(90,45,1:44,56:89)]),
+                           choices = c("All", column_names),
                            selected = default_selection)
       })
       
@@ -118,7 +121,7 @@ genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
       output$column_selector <- renderUI({
         default_selection <- unique(c("Genome", "WBM_geneID",  "Bakta_ID", "gapseq_ID", "IMG_ID", "PATRIC_ID", "Prokka_ID", "Contig_name","Bakta_product","IMG_product","PATRIC_product","Prokka_product"))
         checkboxGroupInput(session$ns("Dcolumns"), "",
-                           choices = c("All", column_names$COLUMN_NAME[c(90,45,1:44,56:89)]),
+                           choices = c("All", column_names),
                            selected = default_selection)
       })
       
@@ -689,7 +692,6 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
           } else {
             UCTable=utable$x %>% select(all_of(input$columns))
           }
-          print(input$columns)
           reactable(UCTable,
                     searchable = TRUE,
                     filterable = TRUE,
@@ -725,7 +727,7 @@ userGeneCartserv <- function(ida, utable, wbdb, phylo, nrUTable) {
         default_selection <- unique(c("Genome", "WBM_geneID", default_columns))
         
         checkboxGroupInput(session$ns("columns"), "",
-                           choices = c("All", column_names$COLUMN_NAME[c(90,45,1:44,56:89)]),
+                           choices = c("All", column_names),
                            selected = default_selection)
       })
       
