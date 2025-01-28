@@ -120,6 +120,7 @@ genseSearchServ<-function(ida,wbdb, column_names,phylo,utable,ugenome,nrUTable){
       ns=session$ns
       output$column_selector <- renderUI({
         default_selection <- unique(c("Genome", "WBM_geneID",  "Bakta_ID", "gapseq_ID", "IMG_ID", "PATRIC_ID", "Prokka_ID", "Contig_name","Bakta_product","IMG_product","PATRIC_product","Prokka_product"))
+        print(c("All", column_names))
         checkboxGroupInput(session$ns("Dcolumns"), "",
                            choices = c("All", column_names),
                            selected = default_selection)
