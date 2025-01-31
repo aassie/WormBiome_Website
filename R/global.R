@@ -20,7 +20,7 @@ wormreader_password=""
 
 ## File location
 srvloc="/srv/shiny-server/"
-#srvloc="./"
+#srvloc="../accessory_files/"
 
 custom_db<-"All.ref"
 print("Loading database")

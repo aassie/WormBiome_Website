@@ -76,7 +76,7 @@ blastServer <-  function(ida, custom_db,wbdb,phylo){
           }
           
           # Run BLAST command
-          blast_cmd <- paste0(input$program, " -query ", tmp, " -db ", db, " -evalue ", input$eval, " -outfmt 5 -max_hsps 1 -max_target_seqs 10")
+          blast_cmd <- paste0("/Users/m3thyl/miniforge3/envs/ncbihack/bin/",input$program, " -query ", tmp, " -db ", db, " -evalue ", input$eval, " -outfmt 5 -max_hsps 1 -max_target_seqs 10")
           bdata <- tryCatch({
             system(blast_cmd, intern = TRUE)
           }, error = function(e) {
@@ -124,7 +124,7 @@ blastServer <-  function(ida, custom_db,wbdb,phylo){
         cbind(query_ID,ID,hit_length,bitscore,eval,top,mid,bottom,start,stop)
       })
       #this ensures that NAs get added for no hits
-      results <-  rbind.fill(lapply(results,function(y){as.data.frame((y),stringsAsFactors=FALSE)}))
+      results <-  plyr::rbind.fill(lapply(results,function(y){as.data.frame((y),stringsAsFactors=FALSE)}))
       return(results)
     })
 
